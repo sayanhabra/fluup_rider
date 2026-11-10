@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "486168142354",
+    "project_id": "fluup-7a400",
+    "storage_bucket": "fluup-7a400.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:486168142354:android:b35f0a2a3db9399f93aecb",
+        "android_client_info": {
+          "package_name": "com.fluup.rider"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9hWhht-apRUyQoz5mtdlrAybPBSpg6P8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:486168142354:android:192a7d6ba3bcbc9e93aecb",
+        "android_client_info": {
+          "package_name": "com.fluup.seller"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9hWhht-apRUyQoz5mtdlrAybPBSpg6P8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:486168142354:android:1d13b9f40707245f93aecb",
+        "android_client_info": {
+          "package_name": "com.fluup.user"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9hWhht-apRUyQoz5mtdlrAybPBSpg6P8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
