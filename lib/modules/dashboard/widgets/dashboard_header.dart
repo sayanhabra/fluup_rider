@@ -90,7 +90,7 @@ class DashboardHeader extends StatelessWidget {
           const SizedBox(width: 12),
 
           // ─── Right Side: Notifications ───
-          NotificationBell(),
+          // NotificationBell(),
         ],
       ),
     );

@@ -53,9 +53,9 @@ dependencies:
   lottie: ^3.5.1
   device_info_plus: ^13.3.0
   latlong2: ^0.10.1
-  flutter_map: ^8.3.2
+  # flutter_map: ^8.3.2
   battery_plus: ^7.1.2
-  flutter_local_notifications: ^23.0.0
+  flutter_local_notifications: ^22.3.1
   # cookie_jar: ^4.0.9
   # dio_cookie_manager: ^3.5.0
 
