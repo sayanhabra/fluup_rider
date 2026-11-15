@@ -1,7 +1,6 @@
 // modules/dashboard/widgets/dashboard_header.dart
 
 import 'package:adm_rider/core/config/brand.dart';
-import 'package:adm_rider/modules/notifications/screens/notification_bell.dart';
 import 'package:flutter/material.dart';
 
 class DashboardHeader extends StatelessWidget {

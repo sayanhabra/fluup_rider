@@ -1,9 +1,7 @@
-import 'package:adm_rider/core/config/app_router.dart';
 import 'package:adm_rider/modules/notifications/models/notification_models.dart';
 import 'package:adm_rider/modules/notifications/provider/notification_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 class NotificationScreen extends ConsumerStatefulWidget {
   const NotificationScreen({super.key});
@@ -39,23 +37,6 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
   }
 
   // ==================== ACTIONS ====================
-
-  Future<void> _confirmAndDelete(NotificationItem item) async {
-    final confirmed = await _confirmDelete(item);
-    if (confirmed != true) return;
-
-    await ref.read(notificationNotifierProvider.notifier).delete(item.id);
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Deleted: ${item.title}'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-  }
 
   Future<bool> _confirmDelete(NotificationItem item) async {
     final result = await showDialog<bool>(

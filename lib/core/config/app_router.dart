@@ -1,9 +1,14 @@
 import 'package:adm_rider/core/navigation/main_navigation_shell.dart';
 import 'package:adm_rider/core/navigation/navigation_config.dart';
 import 'package:adm_rider/modules/auth/providers/auth_provider.dart';
-import 'package:adm_rider/modules/auth/screens/startup_screen.dart';
-import 'package:adm_rider/modules/dashboard/screens/home_screen.dart';
+import 'package:adm_rider/modules/dashboard/screens/dashboard_screen.dart';
 import 'package:adm_rider/modules/dashboard/screens/profile_screen.dart';
+import 'package:adm_rider/modules/earnings/screens/earnings_screen.dart';
+import 'package:adm_rider/modules/fulfillment/screens/active_delivery_screen.dart';
+import 'package:adm_rider/modules/fulfillment/screens/trips_screen.dart';
+import 'package:adm_rider/modules/notifications/screens/notification_screen.dart';
+import 'package:adm_rider/modules/profile/screens/bank_payout_details_screen.dart';
+import 'package:adm_rider/modules/profile/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,7 +16,6 @@ import '../../modules/auth/screens/login_screen.dart';
 import '../../modules/auth/screens/profile_setup_screen.dart';
 import '../../modules/auth/screens/splash_screen.dart';
 import '../../modules/auth/screens/verification_submission_screen.dart';
-import '../../modules/dashboard/screens/dashboard_screen.dart';
 
 class AppRoutes {
   static const String startup = '/startup';
@@ -21,15 +25,12 @@ class AppRoutes {
   static const String verificationSubmission = '/auth/verification-submission';
   static const String dashboard = '/dashboard';
   static const String home = '/home';
-  static const String orders = '/orders';
-  static const String allCategory = '/allcategory';
-  static const String sellerDashboard = '/seller/dashboard';
-  static const String sellerOrders = '/seller/orders';
-  static const String riderDashboard = '/rider/dashboard';
-  static const String riderDeliveries = '/rider/deliveries';
   static const String riderEarnings = '/rider/earnings';
+  static const String riderDeliveries = '/rider/deliveries';
   static const String profile = '/profile';
-  static const String products = '/products';
+  static const String settings = '/settings';
+  static const String bankPayout = '/bank-payout';
+  static const String activeDelivery = '/active-delivery';
   static const String kycVerification = '/auth/kycVerification';
   static const String underReview = '/under-review';
   static const String kycRetry = '/kyc-retry';
@@ -48,8 +49,8 @@ class _RouterRefresh extends ChangeNotifier {
 
 bool _isAppRoute(String path) {
   return path == AppRoutes.dashboard ||
-      path == AppRoutes.orders ||
-      path == AppRoutes.products ||
+      path == AppRoutes.riderEarnings ||
+      path == AppRoutes.riderDeliveries ||
       path == AppRoutes.profile;
 }
 
@@ -128,13 +129,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      // Pre-auth routes
-      // GoRoute(
-      //   path: AppRoutes.startup,
-      //   builder: (_, __) => const StartupScreen(),
-      // ),
       GoRoute(path: AppRoutes.splash, builder: (_, __) => const SplashScreen()),
       GoRoute(path: AppRoutes.login, builder: (_, __) => const LoginScreen()),
+      GoRoute(path: AppRoutes.settings, builder: (_, __) => const SettingsScreen()),
+      GoRoute(path: AppRoutes.bankPayout, builder: (_, __) => const BankPayoutDetailsScreen()),
+      GoRoute(path: AppRoutes.activeDelivery, builder: (_, __) => const ActiveDeliveryScreen()),
+      GoRoute(path: AppRoutes.notificationList, builder: (_, __) => const NotificationScreen()),
 
       // Post-auth status screens
       GoRoute(
@@ -146,7 +146,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const VerificationSubmissionScreen(),
       ),
 
-      // Main app shell
+      // Main app shell (Bottom Nav Bar)
       ShellRoute(
         navigatorKey: shellNavigatorKey,
         builder: (context, state, child) {
@@ -157,39 +157,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: AppRoutes.dashboard,
             builder: (_, __) => const DashboardScreen(),
           ),
-          GoRoute(path: AppRoutes.home, builder: (_, __) => const HomeScreen()),
           GoRoute(
-            path: AppRoutes.orders,
-            builder: (_, __) => const OrdersScreen(),
+            path: AppRoutes.riderEarnings,
+            builder: (_, __) => const EarningsScreen(),
           ),
           GoRoute(
-            path: AppRoutes.allCategory,
-            builder: (_, __) => const AllCategoryScreen(),
+            path: AppRoutes.riderDeliveries,
+            builder: (_, __) => const TripsScreen(),
           ),
-          GoRoute(
-            path: AppRoutes.sellerDashboard,
-            builder: (_, __) => const SellerDashboardScreen(),
-          ),
-          GoRoute(
-            path: AppRoutes.sellerOrders,
-            builder: (_, __) => const SellerOrdersScreen(),
-          ),
-          GoRoute(
-            path: AppRoutes.products,
-            builder: (_, __) => const SellerProductsScreen(),
-          ),
-          // GoRoute(
-          //   path: AppRoutes.riderDashboard,
-          //   builder: (_, __) => const RiderDashboardScreen(),
-          // ),
-          // GoRoute(
-          //   path: AppRoutes.riderDeliveries,
-          //   builder: (_, __) => const RiderDeliveriesScreen(),
-          // ),
-          // GoRoute(
-          //   path: AppRoutes.riderEarnings,
-          //   builder: (_, __) => const RiderEarningsScreen(),
-          // ),
           GoRoute(
             path: AppRoutes.profile,
             builder: (_, __) => const ProfileScreen(),

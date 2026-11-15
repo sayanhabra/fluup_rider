@@ -1,6 +1,88 @@
 import 'package:adm_rider/core/shared/const/next_step_enum.dart';
 import 'package:adm_rider/core/shared/const/verification_status_enum.dart';
 
+// ==========================================
+// 1. NEW RIDER DETAILS MODEL
+// ==========================================
+class RiderDetails {
+  final String? dateOfBirth;
+  final String? gender;
+  final String? documentType;
+  final String? documentNumber;
+  final String? documentFrontUrl;
+  final String? documentBackUrl;
+  final String? drivingLicenseNumber;
+  final String? drivingLicenseExpiryDate;
+  final String? drivingLicenseDocumentUrl;
+  final String? vehicleType;
+  final String? vehicleNumber;
+  final String? selfieUrl;
+  final double? faceMatchScore;
+  final DateTime? kycVerifiedAt;
+
+  const RiderDetails({
+    this.dateOfBirth,
+    this.gender,
+    this.documentType,
+    this.documentNumber,
+    this.documentFrontUrl,
+    this.documentBackUrl,
+    this.drivingLicenseNumber,
+    this.drivingLicenseExpiryDate,
+    this.drivingLicenseDocumentUrl,
+    this.vehicleType,
+    this.vehicleNumber,
+    this.selfieUrl,
+    this.faceMatchScore,
+    this.kycVerifiedAt,
+  });
+
+  factory RiderDetails.fromJson(Map<String, dynamic> json) {
+    return RiderDetails(
+      dateOfBirth: json['dateOfBirth'] as String?,
+      gender: json['gender'] as String?,
+      documentType: json['documentType'] as String?,
+      documentNumber: json['documentNumber'] as String?,
+      documentFrontUrl: json['documentFrontUrl'] as String?,
+      documentBackUrl: json['documentBackUrl'] as String?,
+      drivingLicenseNumber: json['drivingLicenseNumber'] as String?,
+      drivingLicenseExpiryDate: json['drivingLicenseExpiryDate'] as String?,
+      drivingLicenseDocumentUrl: json['drivingLicenseDocumentUrl'] as String?,
+      vehicleType: json['vehicleType'] as String?,
+      vehicleNumber: json['vehicleNumber'] as String?,
+      selfieUrl: json['selfieUrl'] as String?,
+      faceMatchScore: json['faceMatchScore'] != null
+          ? double.tryParse(json['faceMatchScore'].toString())
+          : null,
+      kycVerifiedAt: json['kycVerifiedAt'] != null
+          ? DateTime.tryParse(json['kycVerifiedAt'] as String)
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'dateOfBirth': dateOfBirth,
+      'gender': gender,
+      'documentType': documentType,
+      'documentNumber': documentNumber,
+      'documentFrontUrl': documentFrontUrl,
+      'documentBackUrl': documentBackUrl,
+      'drivingLicenseNumber': drivingLicenseNumber,
+      'drivingLicenseExpiryDate': drivingLicenseExpiryDate,
+      'drivingLicenseDocumentUrl': drivingLicenseDocumentUrl,
+      'vehicleType': vehicleType,
+      'vehicleNumber': vehicleNumber,
+      'selfieUrl': selfieUrl,
+      'faceMatchScore': faceMatchScore,
+      'kycVerifiedAt': kycVerifiedAt?.toIso8601String(),
+    };
+  }
+}
+
+// ==========================================
+// 2. UPDATED USER MODEL
+// ==========================================
 class UserModel {
   final int id;
   final String phone;
@@ -8,20 +90,11 @@ class UserModel {
   final String? email;
   final String? profileImagePath;
   final String? profileImage;
-  final String? dateOfBirth;
-  final String? gender;
-  final String? panNumber;
-  final String? documentType;
-  final String? documentNumber;
-  final String? documentFrontUrl;
-  final String? documentBackUrl;
-  final String? selfieUrl;
-  final double? faceMatchScore;
-  final DateTime? kycVerifiedAt;
-  final String? rejectionReason;
   final String role;
   final VerificationStatus verificationStatus;
   final NextStep nextStep;
+  final String? rejectionReason;
+  final RiderDetails? riderDetails;
   final DateTime? createdAt;
 
   const UserModel({
@@ -31,20 +104,11 @@ class UserModel {
     this.email,
     this.profileImagePath,
     this.profileImage,
-    this.dateOfBirth,
-    this.gender,
-    this.panNumber,
-    this.documentType,
-    this.documentNumber,
-    this.documentFrontUrl,
-    this.documentBackUrl,
-    this.selfieUrl,
-    this.faceMatchScore,
-    this.kycVerifiedAt,
-    this.rejectionReason,
     required this.role,
     required this.verificationStatus,
     required this.nextStep,
+    this.rejectionReason,
+    this.riderDetails,
     this.createdAt,
   });
 
@@ -56,26 +120,15 @@ class UserModel {
       email: json['email'] as String?,
       profileImagePath: json['profileImagePath'] as String?,
       profileImage: json['profileImage'] as String?,
-      dateOfBirth: json['dateOfBirth'] as String?,
-      gender: json['gender'] as String?,
-      panNumber: json['panNumber'] as String?,
-      documentType: json['documentType'] as String?,
-      documentNumber: json['documentNumber'] as String?,
-      documentFrontUrl: json['documentFrontUrl'] as String?,
-      documentBackUrl: json['documentBackUrl'] as String?,
-      selfieUrl: json['selfieUrl'] as String?,
-      faceMatchScore: json['faceMatchScore'] != null
-          ? double.tryParse(json['faceMatchScore'].toString())
-          : null,
-      kycVerifiedAt: json['kycVerifiedAt'] != null
-          ? DateTime.tryParse(json['kycVerifiedAt'] as String)
-          : null,
-      rejectionReason: json['rejectionReason'] as String?,
       role: json['role'] as String? ?? 'USER',
       verificationStatus: VerificationStatus.fromString(
         json['verificationStatus'] as String?,
       ),
       nextStep: NextStep.fromString(json['nextStep'] as String?),
+      rejectionReason: json['rejectionReason'] as String?,
+      riderDetails: json['riderDetails'] != null
+          ? RiderDetails.fromJson(json['riderDetails'] as Map<String, dynamic>)
+          : null,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'] as String)
           : null,
@@ -90,23 +143,36 @@ class UserModel {
       'email': email,
       'profileImagePath': profileImagePath,
       'profileImage': profileImage,
-      'dateOfBirth': dateOfBirth,
-      'gender': gender,
-      'panNumber': panNumber,
-      'documentType': documentType,
-      'documentNumber': documentNumber,
-      'documentFrontUrl': documentFrontUrl,
-      'documentBackUrl': documentBackUrl,
-      'selfieUrl': selfieUrl,
-      'faceMatchScore': faceMatchScore,
-      'kycVerifiedAt': kycVerifiedAt?.toIso8601String(),
-      'rejectionReason': rejectionReason,
       'role': role,
       'verificationStatus': verificationStatus.value,
       'nextStep': nextStep.value,
+      'rejectionReason': rejectionReason,
+      'riderDetails': riderDetails?.toJson(),
       'createdAt': createdAt?.toIso8601String(),
     };
   }
+
+  // ─── Convenience Getters (Proxy to RiderDetails) ───
+
+  String? get dateOfBirth => riderDetails?.dateOfBirth;
+  String? get gender => riderDetails?.gender;
+  String? get panNumber =>
+      null; // Not present in JSON, but keeping for compatibility if you add it later
+  String? get documentType => riderDetails?.documentType;
+  String? get documentNumber => riderDetails?.documentNumber;
+  String? get documentFrontUrl => riderDetails?.documentFrontUrl;
+  String? get documentBackUrl => riderDetails?.documentBackUrl;
+  String? get selfieUrl => riderDetails?.selfieUrl;
+  double? get faceMatchScore => riderDetails?.faceMatchScore;
+  DateTime? get kycVerifiedAt => riderDetails?.kycVerifiedAt;
+
+  String? get drivingLicenseNumber => riderDetails?.drivingLicenseNumber;
+  String? get drivingLicenseExpiryDate =>
+      riderDetails?.drivingLicenseExpiryDate;
+  String? get drivingLicenseDocumentUrl =>
+      riderDetails?.drivingLicenseDocumentUrl;
+  String? get vehicleType => riderDetails?.vehicleType;
+  String? get vehicleNumber => riderDetails?.vehicleNumber;
 
   // ─── Helper Properties ───
 
@@ -231,20 +297,11 @@ class UserModel {
     String? email,
     String? profileImagePath,
     String? profileImage,
-    String? dateOfBirth,
-    String? gender,
-    String? panNumber,
-    String? documentType,
-    String? documentNumber,
-    String? documentFrontUrl,
-    String? documentBackUrl,
-    String? selfieUrl,
-    double? faceMatchScore,
-    DateTime? kycVerifiedAt,
-    String? rejectionReason,
     String? role,
     VerificationStatus? verificationStatus,
     NextStep? nextStep,
+    String? rejectionReason,
+    RiderDetails? riderDetails,
     DateTime? createdAt,
   }) {
     return UserModel(
@@ -254,20 +311,11 @@ class UserModel {
       email: email ?? this.email,
       profileImagePath: profileImagePath ?? this.profileImagePath,
       profileImage: profileImage ?? this.profileImage,
-      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
-      gender: gender ?? this.gender,
-      panNumber: panNumber ?? this.panNumber,
-      documentType: documentType ?? this.documentType,
-      documentNumber: documentNumber ?? this.documentNumber,
-      documentFrontUrl: documentFrontUrl ?? this.documentFrontUrl,
-      documentBackUrl: documentBackUrl ?? this.documentBackUrl,
-      selfieUrl: selfieUrl ?? this.selfieUrl,
-      faceMatchScore: faceMatchScore ?? this.faceMatchScore,
-      kycVerifiedAt: kycVerifiedAt ?? this.kycVerifiedAt,
-      rejectionReason: rejectionReason ?? this.rejectionReason,
       role: role ?? this.role,
       verificationStatus: verificationStatus ?? this.verificationStatus,
       nextStep: nextStep ?? this.nextStep,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      riderDetails: riderDetails ?? this.riderDetails,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -284,26 +332,16 @@ class UserModel {
         other.email == email &&
         other.profileImagePath == profileImagePath &&
         other.profileImage == profileImage &&
-        other.dateOfBirth == dateOfBirth &&
-        other.gender == gender &&
-        other.panNumber == panNumber &&
-        other.documentType == documentType &&
-        other.documentNumber == documentNumber &&
-        other.documentFrontUrl == documentFrontUrl &&
-        other.documentBackUrl == documentBackUrl &&
-        other.selfieUrl == selfieUrl &&
-        other.faceMatchScore == faceMatchScore &&
-        other.kycVerifiedAt == kycVerifiedAt &&
-        other.rejectionReason == rejectionReason &&
         other.role == role &&
         other.verificationStatus == verificationStatus &&
         other.nextStep == nextStep &&
+        other.rejectionReason == rejectionReason &&
+        other.riderDetails == riderDetails &&
         other.createdAt == createdAt;
   }
 
   @override
   int get hashCode {
-    // Using Object.hashAll to handle more than 20 arguments
     return Object.hashAll([
       id,
       phone,
@@ -311,20 +349,11 @@ class UserModel {
       email,
       profileImagePath,
       profileImage,
-      dateOfBirth,
-      gender,
-      panNumber,
-      documentType,
-      documentNumber,
-      documentFrontUrl,
-      documentBackUrl,
-      selfieUrl,
-      faceMatchScore,
-      kycVerifiedAt,
-      rejectionReason,
       role,
       verificationStatus,
       nextStep,
+      rejectionReason,
+      riderDetails,
       createdAt,
     ]);
   }

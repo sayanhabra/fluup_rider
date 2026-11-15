@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:adm_rider/core/shared/helpers/two_wheeler_marker_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -15,6 +16,11 @@ class GoogleMapHelper {
   GoogleMapController? _mapController;
 
   GoogleMapController? get mapController => _mapController;
+
+  /// Retrieves the two-wheeler vehicle marker icon (or custom asset image if set).
+  Future<BitmapDescriptor> getTwoWheelerMarkerIcon({String? assetPath}) {
+    return TwoWheelerMarkerHelper.instance.getTwoWheelerMarker(assetPath: assetPath);
+  }
 
   // ============================================================
   // DEFAULT VALUES

@@ -49,8 +49,9 @@ class MyApp extends ConsumerWidget {
 
       // Theme
       theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      // darkTheme: AppTheme.darkTheme,
+      // themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
 
       // GoRouter
       routerConfig: router, // Use the appRouter from app_router.dart

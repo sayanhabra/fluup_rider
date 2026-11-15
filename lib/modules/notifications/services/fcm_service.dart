@@ -1,23 +1,25 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:adm_rider/core/config/app_router.dart';
+import 'package:adm_rider/core/shared/helpers/notification_sound_helper.dart';
 import 'package:adm_rider/firebase_options.dart';
+import 'package:adm_rider/modules/fulfillment/models/delivery_order.dart';
+import 'package:adm_rider/modules/fulfillment/providers/fulfillment_provider.dart';
+import 'package:adm_rider/modules/fulfillment/screens/new_order_request_modal.dart';
 import 'package:adm_rider/modules/notifications/services/local_notification_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   debugPrint('🔔 Background FCM message received: ${message.messageId}');
-
   debugPrint('Title: ${message.notification?.title}');
-
   debugPrint('Body: ${message.notification?.body}');
-
   debugPrint('Data: ${message.data}');
-
-  // Later we can process data here if required.
 }
 
 class FcmService {
@@ -25,7 +27,10 @@ class FcmService {
 
   static final FcmService instance = FcmService._();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  FirebaseMessaging? _messagingInstance;
+  FirebaseMessaging get _messaging => _messagingInstance ??= FirebaseMessaging.instance;
+
+  int? _activeModalOrderId;
 
   Future<void> initialize() async {
     // 1. iOS: wait until APNs token is available
@@ -53,16 +58,9 @@ class FcmService {
       debugPrint('FCM getToken error: $e');
     }
 
-    // TODO:
-    // Send this token to your Fluup backend
-    // after the user logs in.
-
     // 4. Listen for token refresh
     _messaging.onTokenRefresh.listen((newToken) {
       debugPrint('FCM TOKEN REFRESHED: $newToken');
-
-      // TODO:
-      // Send updated token to your backend
     });
 
     // 5. Foreground messages
@@ -76,11 +74,14 @@ class FcmService {
       debugPrint('Body: $body');
       debugPrint('Data: ${message.data}');
 
+      // Process event payload (e.g. RIDER_OFFER, play sound, open modal)
+      await handleNotificationPayload(message.data);
+
       if (title != null || body != null) {
         await LocalNotificationService.instance.showNotification(
           title: title ?? 'Fluup',
           body: body ?? '',
-          payload: message.data.toString(),
+          payload: jsonEncode(message.data),
         );
       }
     });
@@ -88,7 +89,6 @@ class FcmService {
     // 6. User taps notification while app is in background
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('Notification opened: ${message.data}');
-
       _handleNotificationTap(message);
     });
 
@@ -96,30 +96,85 @@ class FcmService {
     final initialMessage = await _messaging.getInitialMessage();
 
     if (initialMessage != null) {
-      debugPrint(
-        'App opened from notification: '
-        '${initialMessage.data}',
-      );
-
+      debugPrint('App opened from notification: ${initialMessage.data}');
       _handleNotificationTap(initialMessage);
     }
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    final data = message.data;
+    handleNotificationPayload(message.data);
+  }
 
-    debugPrint('Notification data: $data');
+  /// Processes notification data payload.
+  /// When event == "RIDER_OFFER":
+  /// 1. Plays sound from data['sound']
+  /// 2. Parses DeliveryOrder
+  /// 3. Shows NewOrderRequestModal
+  Future<void> handleNotificationPayload(Map<String, dynamic> data) async {
+    debugPrint('🔔 [FcmService] Handling payload: $data');
 
-    // Later we will navigate using your GoRouter.
-    //
-    // Example:
-    //
-    // if (data['type'] == 'order') {
-    //   final orderId = data['orderId'];
-    //
-    //   appRouter.go(
-    //     '/order/$orderId',
-    //   );
-    // }
+    final event = data['event']?.toString().toUpperCase();
+    final type = data['type']?.toString().toUpperCase();
+
+    if (event == 'RIDER_OFFER' || type == 'RIDER_OFFER') {
+      final sound = data['sound']?.toString() ??
+          data['soundlink']?.toString() ??
+          data['sound_link']?.toString() ??
+          data['audio']?.toString();
+
+      // 1. Play sound
+      if (sound != null && sound.isNotEmpty) {
+        await NotificationSoundHelper.instance.play(sound);
+      }
+
+      // 2. Parse delivery order from notification data
+      final order = DeliveryOrder.fromNotificationData(data);
+
+      // 3. Show Accept / Reject screen
+      showOfferModal(order);
+    }
+  }
+
+  /// Helper to display NewOrderRequestModal over the current top screen
+  void showOfferModal(DeliveryOrder order) {
+    if (_activeModalOrderId == order.orderId) {
+      debugPrint('⚠️ [FcmService] Offer modal already active for order #${order.orderId}');
+      return;
+    }
+
+    void present() {
+      final context = rootNavigatorKey.currentContext;
+      if (context == null || !context.mounted) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (_activeModalOrderId != order.orderId) {
+            present();
+          }
+        });
+        return;
+      }
+
+      _activeModalOrderId = order.orderId;
+
+      try {
+        final container = ProviderScope.containerOf(context, listen: false);
+        container.read(fulfillmentProvider.notifier).setIncomingOffer(order);
+      } catch (e) {
+        debugPrint('Provider container sync notice: $e');
+      }
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => NewOrderRequestModal(
+            order: order,
+          ),
+        ),
+      ).then((_) {
+        if (_activeModalOrderId == order.orderId) {
+          _activeModalOrderId = null;
+        }
+      });
+    }
+
+    present();
   }
 }

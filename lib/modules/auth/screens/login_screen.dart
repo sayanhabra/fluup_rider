@@ -9,7 +9,6 @@ import 'package:adm_rider/modules/dashboard/widgets/dashboard_loading_screen.dar
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lottie/lottie.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -44,13 +43,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   late AnimationController _bgController; // looping ambient motion
   late AnimationController _shakeController; // error shake
   late Animation<Offset> _bannerSlide;
-  late Animation<Offset> _carSlide;
   late Animation<Offset> _formSlide;
   late Animation<double> _brandFade;
   late Animation<Offset> _brandSlide;
-
-  // ─── Lottie Future (Loads once) ───
-  late Future<LottieComposition> _lottieComposition;
 
   // ─── Validation ───
   bool get _isMobileValid => _mobileController.text.trim().length == 10;
@@ -60,9 +55,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   void initState() {
     super.initState();
-
-    // Load Lottie once into memory to prevent loop blinking
-    _lottieComposition = AssetLottie('assets/animation/drive.json').load();
 
     // Setup Screen Entrance Animations
     _animationController = AnimationController(
@@ -98,14 +90,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           CurvedAnimation(
             parent: _animationController,
             curve: const Interval(0.3, 0.75, curve: Curves.easeOutCubic),
-          ),
-        );
-
-    _carSlide = Tween<Offset>(begin: const Offset(-1.4, 0), end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _animationController,
-            curve: const Interval(0.25, 0.85, curve: Curves.easeOutBack),
           ),
         );
 
@@ -383,106 +367,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   // ─── Banner ───
   Widget _buildBanner(BuildContext context) {
-    return Container(
-      height: MediaQuery.sizeOf(context).height * 0.25,
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: Brand.headerGradientLight,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
-        child: Stack(
-          children: [
-            // Ambient floating bubbles
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _bgController,
-                builder: (context, _) =>
-                    CustomPaint(painter: _BubblesPainter(_bgController.value)),
-              ),
-            ),
-
-            // Text Content
-            Positioned(
-              left: 24,
-              top: 40,
-              child: FadeTransition(
-                opacity: _brandFade,
-                child: SlideTransition(
-                  position: _brandSlide,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Fluup',
-                        style: AppStyle.heading1.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Your Spirits. \nYour Style. Delivered.',
-                        style: AppStyle.bodyMedium.copyWith(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // 2. ANIMATED CAR (Slides from Left, then gently bobs)
-            Positioned(
-              right: -10,
-              bottom: -10,
+    return ClipPath(
+      clipper: const _BannerCurveClipper(),
+      child: Container(
+        height: MediaQuery.sizeOf(context).height * 0.28,
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFE53935),
+              Color(0xFFD32F2F),
+              Color(0xFFC62828),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Center(
+            child: FadeTransition(
+              opacity: _brandFade,
               child: SlideTransition(
-                position: _carSlide,
-                child: AnimatedBuilder(
-                  animation: _bgController,
-                  builder: (context, child) {
-                    final dy =
-                        math.sin(_bgController.value * math.pi * 2 * 6) * 2.5;
-                    return Transform.translate(
-                      offset: Offset(0, dy),
-                      child: child,
-                    );
-                  },
-                  child: RepaintBoundary(
-                    child: SizedBox(
-                      width: 200,
-                      height: 200,
-                      child: FutureBuilder<LottieComposition>(
-                        future: _lottieComposition,
-                        builder: (context, snapshot) {
-                          if (snapshot.hasError) {
-                            return _lottieError(
-                              context,
-                              snapshot.error!,
-                              snapshot.stackTrace,
-                            );
-                          }
-                          if (snapshot.hasData) {
-                            return Lottie(
-                              composition: snapshot.data,
-                              fit: BoxFit.contain,
-                              repeat: true,
-                              frameRate: FrameRate.composition,
-                            );
-                          }
-                          // Keep invisible while loading so it doesn't flash
-                          return const SizedBox.shrink();
-                        },
+                position: _brandSlide,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Stylized Wing Symbol
+                    const _FluupBannerWing(size: 46),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Fluup',
+                      style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -0.5,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -636,29 +564,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         _Stagger(
           index: 0,
           child: _buildHeader(
-            title: 'Welcome to Fluup',
-            subtitle: 'Log In or Sign Up to continue',
+            title: 'Rider Login',
+            subtitle: 'Enter your mobile number to get an OTP',
           ),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 28),
         _Stagger(
           index: 1,
           child: Text(
-            'Enter mobile number',
+            'Mobile Number',
             style: AppStyle.titleSmall.copyWith(
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade700,
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         _Stagger(
           index: 2,
           child: Row(
             children: [
               Container(
-                height: 60,
-                width: 70,
+                height: 56,
+                width: 65,
                 decoration: BoxDecoration(
                   color: context.isDarkMode
                       ? Colors.grey.shade900
@@ -669,13 +597,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 child: const Text(
                   '+91',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: Colors.black87,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: _GlowField(
                   focusNode: _mobileFocus,
@@ -685,6 +613,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     focusNode: _mobileFocus,
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _checkPhone(),
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
                       LengthLimitingTextInputFormatter(10),
@@ -694,12 +623,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       setState(() {});
                     },
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w500,
                       color: context.isDarkMode ? Colors.white : Colors.black87,
                     ),
                     decoration: _premiumInputDecoration(
-                      hint: 'Mobile number',
+                      hint: 'Enter mobile number',
+                      icon: Icons.phone_outlined,
                     ),
                   ),
                 ),
@@ -707,7 +637,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ],
           ),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 28),
         _Stagger(
           index: 3,
           child: _buildPremiumButton(
@@ -717,6 +647,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
         _buildErrorText(),
+        const SizedBox(height: 20),
+        _Stagger(
+          index: 4,
+          child: Center(
+            child: Text(
+              'A 6-digit OTP will be sent to verify your account',
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1222,44 +1166,76 @@ class _PremiumButtonState extends State<_PremiumButton> {
   }
 }
 
-/// Soft drifting bubbles painted over the banner gradient.
-class _BubblesPainter extends CustomPainter {
-  final double t; // 0..1 looping
-
-  _BubblesPainter(this.t);
-
-  static const _bubbles = <List<double>>[
-    // dx, dy, radius, speed, opacity
-    [0.12, 0.25, 36, 1, 0.10],
-    [0.45, 0.75, 22, 2, 0.12],
-    [0.70, 0.20, 48, 1, 0.08],
-    [0.90, 0.60, 28, 3, 0.12],
-    [0.30, 0.55, 16, 2, 0.14],
-    [0.60, 0.45, 12, 3, 0.16],
-    [0.05, 0.80, 30, 1, 0.09],
-  ];
+/// Curved bottom edge clipper matching Screen 2 banner
+class _BannerCurveClipper extends CustomClipper<Path> {
+  const _BannerCurveClipper();
 
   @override
-  void paint(Canvas canvas, Size size) {
-    for (var i = 0; i < _bubbles.length; i++) {
-      final b = _bubbles[i];
-      final phase = (t * b[3] + i / _bubbles.length) * math.pi * 2;
-      final x = size.width * b[0] + math.sin(phase) * 14;
-      final y = size.height * b[1] + math.cos(phase) * 12;
-      final paint = Paint()..color = Colors.white.withValues(alpha: b[4]);
-      canvas.drawCircle(Offset(x, y), b[2], paint);
-    }
+  Path getClip(Size size) {
+    final path = Path();
+    path.lineTo(0, size.height - 36);
+    // Smooth quadratic curve down towards center
+    path.quadraticBezierTo(
+      size.width / 2,
+      size.height + 16,
+      size.width,
+      size.height - 36,
+    );
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
   }
 
   @override
-  bool shouldRepaint(covariant _BubblesPainter old) => old.t != t;
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
-// Extracted error builder for Lottie
-Widget _lottieError(
-  BuildContext context,
-  Object error,
-  StackTrace? stackTrace,
-) {
-  return const Icon(Icons.delivery_dining, size: 100, color: Colors.white);
+class _FluupBannerWing extends StatelessWidget {
+  final double size;
+  const _FluupBannerWing({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size * 0.65,
+      child: CustomPaint(
+        painter: _BannerWingPainter(),
+      ),
+    );
+  }
+}
+
+class _BannerWingPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    // Top wing
+    final topPath = Path()
+      ..moveTo(0, size.height * 0.15)
+      ..lineTo(size.width * 0.88, 0)
+      ..cubicTo(size.width * 1.0, 0, size.width * 0.95, size.height * 0.35, size.width * 0.82, size.height * 0.35)
+      ..lineTo(size.width * 0.36, size.height * 0.35)
+      ..lineTo(size.width * 0.26, size.height * 0.52)
+      ..lineTo(0, size.height * 0.15)
+      ..close();
+    canvas.drawPath(topPath, paint);
+
+    // Bottom wing
+    final bottomPath = Path()
+      ..moveTo(size.width * 0.12, size.height * 0.60)
+      ..lineTo(size.width * 0.72, size.height * 0.48)
+      ..cubicTo(size.width * 0.84, size.height * 0.48, size.width * 0.78, size.height * 0.78, size.width * 0.68, size.height * 0.78)
+      ..lineTo(size.width * 0.38, size.height * 0.78)
+      ..lineTo(size.width * 0.24, size.height * 1.0)
+      ..lineTo(size.width * 0.12, size.height * 0.60)
+      ..close();
+    canvas.drawPath(bottomPath, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -4,6 +4,7 @@ import 'package:adm_rider/core/shared/const/verification_status_enum.dart';
 import 'package:adm_rider/core/shared/helpers/device_info_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:adm_rider/modules/fulfillment/providers/fulfillment_provider.dart';
 import '../../../core/shared/const/next_step_enum.dart';
 import '../models/user_model.dart';
 import '../models/verify_otp_request.dart';
@@ -251,6 +252,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       try {
+        ref.read(fulfillmentProvider.notifier).resetOnLogout();
+      } catch (_) {}
+      try {
+        await _apiService.updateRiderStatus('OFFLINE');
+      } catch (_) {}
+      try {
         await _apiService.logout();
       } catch (_) {}
       await _tokenStorage.clearTokens();
@@ -275,5 +282,21 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         ),
       ),
     );
+  }
+
+  Future<void> refreshProfile() async {
+    final current = state.asData?.value;
+    if (current is! AuthAuthenticated) return;
+    try {
+      final updatedUser = await _apiService.getProfileAsUser();
+      state = AsyncValue.data(
+        AuthAuthenticated(
+          accessToken: current.accessToken,
+          user: updatedUser,
+        ),
+      );
+    } catch (e) {
+      debugPrint('⚠️ Error refreshing profile: $e');
+    }
   }
 }

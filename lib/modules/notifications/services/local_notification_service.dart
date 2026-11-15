@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:adm_rider/modules/notifications/services/fcm_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class LocalNotificationService {
@@ -91,11 +94,23 @@ class LocalNotificationService {
   void _onNotificationTap(NotificationResponse response) {
     final payload = response.payload;
 
-    if (payload == null) {
+    if (payload == null || payload.isEmpty) {
       return;
     }
 
-    // Later we will use this for GoRouter navigation.
-    print('Local notification tapped: $payload');
+    debugPrint('Local notification tapped: $payload');
+    try {
+      final decoded = jsonDecode(payload);
+      debugPrint('Decoded: $decoded');
+      if (decoded is Map<String, dynamic>) {
+        FcmService.instance.handleNotificationPayload(decoded);
+      } else if (decoded is Map) {
+        FcmService.instance.handleNotificationPayload(
+          Map<String, dynamic>.from(decoded),
+        );
+      }
+    } catch (e) {
+      debugPrint('Failed to parse local notification payload: $e');
+    }
   }
 }

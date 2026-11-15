@@ -1,86 +1,29 @@
-// core/config/navigation_config.dart
-
-import 'package:adm_rider/core/config/app_icons.dart';
 import 'package:adm_rider/core/config/app_router.dart';
 import 'package:adm_rider/core/shared/const/role_enum.dart';
-// import 'package:adm_rider/features/auth/providers/auth_provider.dart';
 import 'package:adm_rider/modules/auth/providers/auth_provider.dart';
 import 'package:adm_rider/modules/dashboard/screens/dashboard_screen.dart';
 import 'package:adm_rider/modules/dashboard/screens/profile_screen.dart';
+import 'package:adm_rider/modules/earnings/screens/earnings_screen.dart';
+import 'package:adm_rider/modules/fulfillment/screens/trips_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class OrdersScreen extends StatelessWidget {
-  const OrdersScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Orders Screen'));
-}
-
-class SellerProductsScreen extends StatelessWidget {
-  const SellerProductsScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Products Screen'));
-}
-
-class AllCategoryScreen extends StatelessWidget {
-  const AllCategoryScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Profile Screen'));
-}
-
-class SellerDashboardScreen extends StatelessWidget {
-  const SellerDashboardScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Profile Screen'));
-}
-
-class SellerOrdersScreen extends StatelessWidget {
-  const SellerOrdersScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Profile Screen'));
-}
-
-class RiderDashboardScreen extends StatelessWidget {
-  const RiderDashboardScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Profile Screen'));
-}
-
-class RiderDeliveriesScreen extends StatelessWidget {
-  const RiderDeliveriesScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Profile Screen'));
-}
-
-class RiderEarningsScreen extends StatelessWidget {
-  const RiderEarningsScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Profile Screen'));
-}
 // ============================================================
 // NAVIGATION ITEM MODEL
 // ============================================================
 
 class NavigationItem {
   final String label;
-  final String iconPath;
-  final String activeIconPath;
+  final IconData icon;
+  final IconData activeIcon;
   final String route;
   final Widget screen;
   final List<RoleEnum> allowedRoles;
 
   NavigationItem({
     required this.label,
-    required this.iconPath,
-    required this.activeIconPath,
+    required this.icon,
+    required this.activeIcon,
     required this.route,
     required this.screen,
     required this.allowedRoles,
@@ -93,180 +36,50 @@ class NavigationItem {
 
 class NavigationConfig {
   static String getRoleName(RoleEnum? role) {
-    return role?.displayName ?? 'User';
+    return role?.displayName ?? 'Rider';
   }
 
   // ============================================================
-  // SELLER NAVIGATION
-  // ============================================================
-
-  static final List<NavigationItem> sellerItems = [
-    NavigationItem(
-      label: 'Home',
-      iconPath: AppIcons.home,
-      activeIconPath: AppIcons.home,
-      route: AppRoutes.dashboard,
-      screen: const DashboardScreen(),
-      allowedRoles: [RoleEnum.seller],
-    ),
-
-    NavigationItem(
-      label: 'Orders',
-      iconPath: AppIcons.cart,
-      activeIconPath: AppIcons.cart,
-      route: AppRoutes.orders,
-      screen: const OrdersScreen(),
-      allowedRoles: [RoleEnum.seller],
-    ),
-
-    NavigationItem(
-      label: 'Products',
-      iconPath: AppIcons.all,
-      activeIconPath: AppIcons.all,
-      route: AppRoutes.products,
-      screen: const SellerProductsScreen(),
-      allowedRoles: [RoleEnum.seller],
-    ),
-
-    NavigationItem(
-      label: 'Profile',
-      iconPath: AppIcons.profile,
-      activeIconPath: AppIcons.profile,
-      route: AppRoutes.profile,
-      screen: const ProfileScreen(),
-      allowedRoles: [RoleEnum.seller],
-    ),
-  ];
-
-  // ============================================================
-  // USER NAVIGATION
-  // ============================================================
-
-  static final List<NavigationItem> userItems = [
-    NavigationItem(
-      label: 'Home',
-      iconPath: AppIcons.home,
-      activeIconPath: AppIcons.home,
-      route: AppRoutes.dashboard,
-      screen: const DashboardScreen(),
-      allowedRoles: [RoleEnum.user],
-    ),
-
-    NavigationItem(
-      label: 'Orders',
-      iconPath: AppIcons.cart,
-      activeIconPath: AppIcons.cart,
-      route: AppRoutes.orders,
-      screen: const OrdersScreen(),
-      allowedRoles: [RoleEnum.user],
-    ),
-
-    NavigationItem(
-      label: 'Profile',
-      iconPath: AppIcons.profile,
-      activeIconPath: AppIcons.profile,
-      route: AppRoutes.profile,
-      screen: const ProfileScreen(),
-      allowedRoles: [RoleEnum.user],
-    ),
-  ];
-
-  // ============================================================
-  // RIDER NAVIGATION
+  // RIDER NAVIGATION (Mockup 4 Tabs: Home, Earnings, Trips, Profile)
   // ============================================================
 
   static final List<NavigationItem> riderItems = [
     NavigationItem(
       label: 'Home',
-      iconPath: AppIcons.home,
-      activeIconPath: AppIcons.home,
-      route: AppRoutes.dashboard,
-      screen: const RiderDashboardScreen(),
-      allowedRoles: [RoleEnum.rider],
-    ),
-
-    NavigationItem(
-      label: 'Deliveries',
-      iconPath: AppIcons.cart,
-      activeIconPath: AppIcons.cart,
-      route: AppRoutes.orders,
-      screen: const RiderDeliveriesScreen(),
-      allowedRoles: [RoleEnum.rider],
-    ),
-
-    NavigationItem(
-      label: 'Earnings',
-      iconPath: AppIcons.all,
-      activeIconPath: AppIcons.all,
-      route: AppRoutes.products,
-      screen: const RiderEarningsScreen(),
-      allowedRoles: [RoleEnum.rider],
-    ),
-
-    NavigationItem(
-      label: 'Profile',
-      iconPath: AppIcons.profile,
-      activeIconPath: AppIcons.profile,
-      route: AppRoutes.profile,
-      screen: const ProfileScreen(),
-      allowedRoles: [RoleEnum.rider],
-    ),
-  ];
-
-  // ============================================================
-  // ADMIN NAVIGATION
-  // ============================================================
-
-  static final List<NavigationItem> adminItems = [
-    NavigationItem(
-      label: 'Dashboard',
-      iconPath: AppIcons.home,
-      activeIconPath: AppIcons.home,
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
       route: AppRoutes.dashboard,
       screen: const DashboardScreen(),
-      allowedRoles: [RoleEnum.admin],
+      allowedRoles: [RoleEnum.rider],
     ),
-
     NavigationItem(
-      label: 'Orders',
-      iconPath: AppIcons.cart,
-      activeIconPath: AppIcons.cart,
-      route: AppRoutes.orders,
-      screen: const OrdersScreen(),
-      allowedRoles: [RoleEnum.admin],
+      label: 'Earnings',
+      icon: Icons.account_balance_wallet_outlined,
+      activeIcon: Icons.account_balance_wallet_rounded,
+      route: AppRoutes.riderEarnings,
+      screen: const EarningsScreen(),
+      allowedRoles: [RoleEnum.rider],
     ),
-
+    NavigationItem(
+      label: 'Trips',
+      icon: Icons.shopping_bag_outlined,
+      activeIcon: Icons.shopping_bag_rounded,
+      route: AppRoutes.riderDeliveries,
+      screen: const TripsScreen(),
+      allowedRoles: [RoleEnum.rider],
+    ),
     NavigationItem(
       label: 'Profile',
-      iconPath: AppIcons.profile,
-      activeIconPath: AppIcons.profile,
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
       route: AppRoutes.profile,
       screen: const ProfileScreen(),
-      allowedRoles: [RoleEnum.admin],
+      allowedRoles: [RoleEnum.rider],
     ),
   ];
 
-  // ============================================================
-  // GET NAVIGATION BY ROLE
-  // ============================================================
-
   static List<NavigationItem> getItemsForRole(RoleEnum? role) {
-    switch (role) {
-      case RoleEnum.user:
-        return userItems;
-
-      case RoleEnum.seller:
-        return sellerItems;
-
-      case RoleEnum.rider:
-        return riderItems;
-
-      case RoleEnum.admin:
-        return adminItems;
-
-      case null:
-        return [];
-    }
+    return riderItems;
   }
 }
 
@@ -276,18 +89,13 @@ class NavigationConfig {
 
 final userRoleProvider = Provider<RoleEnum?>((ref) {
   final auth = ref.watch(authNotifierProvider);
-
   final state = auth.asData?.value;
-
   if (state is AuthAuthenticated) {
     return RoleEnum.fromString(state.user.role);
   }
-
-  return null;
+  return RoleEnum.rider;
 });
 
 final navigationItemsProvider = Provider<List<NavigationItem>>((ref) {
-  final role = ref.watch(userRoleProvider);
-
-  return NavigationConfig.getItemsForRole(role);
+  return NavigationConfig.riderItems;
 });

@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:adm_rider/core/config/app_router.dart';
-import 'package:adm_rider/core/config/brand.dart';
 import 'package:adm_rider/core/shared/helpers/app_permission_helper.dart';
 import 'package:adm_rider/modules/auth/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -18,26 +15,14 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen>
-    with TickerProviderStateMixin {
-  late final AnimationController _slideController;
-  late final Animation<double> _horizontalSlide;
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<Offset> _slideAnimation;
 
-  late final AnimationController _textController;
-  late final Animation<double> _textFade;
-  late final Animation<Offset> _textSlide;
-  late final Animation<double> _textScale;
-  late final Animation<double> _taglineSpacing;
-
-  // Ambient looping background motion
-  late final AnimationController _bgController;
-
-  Timer? _showTextTimer;
-  Timer? _hideTextTimer;
-  Timer? _sequenceTimer;
+  Timer? _navTimer;
   bool _isNavigating = false;
-
-  // Tweak this if the car sits higher/lower in your Lottie file.
-  static const double _streakTopFactor = 0.62;
 
   @override
   void initState() {
@@ -47,97 +32,49 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       AppPermissionHelper.requestInitialPermissions();
     });
 
-    _bgController = AnimationController(
+    _animController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10),
-    )..repeat();
-
-    // 1. Image sliding animation (Total: 4500ms)
-    _slideController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 4500),
+      duration: const Duration(milliseconds: 1400),
     );
 
-    _horizontalSlide = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(
-          begin: -1.0,
-          end: 0.0,
-        ).chain(CurveTween(curve: Curves.easeOutCubic)),
-        weight: 25, // 0ms - 1125ms (Enter)
+    _fadeAnimation = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.0, 0.7, curve: Curves.easeIn),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.9, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: const Interval(0.0, 0.7, curve: Curves.easeOutBack),
       ),
-      TweenSequenceItem(
-        tween: ConstantTween(0.0),
-        weight: 50, // 1125ms - 3375ms (Wait in center)
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: const Interval(0.2, 0.8, curve: Curves.easeOutCubic),
       ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 0.0,
-          end: 1.0,
-        ).chain(CurveTween(curve: Curves.easeInCubic)),
-        weight: 25, // 3375ms - 4500ms (Exit)
-      ),
-    ]).animate(_slideController);
-
-    // 2. Text animation
-    _textController = AnimationController(
-      vsync: this,
-      // 1125ms so it matches the Lottie's exit duration exactly.
-      duration: const Duration(milliseconds: 1125),
     );
 
-    _textFade = CurvedAnimation(parent: _textController, curve: Curves.easeIn);
+    _animController.forward();
 
-    _textSlide = Tween<Offset>(begin: const Offset(0, 0.25), end: Offset.zero)
-        .animate(
-          CurvedAnimation(parent: _textController, curve: Curves.easeOutCubic),
-        );
-
-    _textScale = Tween<double>(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(parent: _textController, curve: Curves.easeOutCubic),
-    );
-
-    _taglineSpacing = Tween<double>(begin: 3.0, end: 0.2).animate(
-      CurvedAnimation(parent: _textController, curve: Curves.easeOutCubic),
-    );
-
-    // 3. Start the precise sequence
-    _startSequence();
-  }
-
-  void _startSequence() {
-    // Start Lottie sliding
-    _slideController.forward();
-
-    // Timer 1: Show text exactly when Lottie hits center (1125ms)
-    _showTextTimer = Timer(const Duration(milliseconds: 1125), () {
-      if (mounted) _textController.forward();
-    });
-
-    // Timer 2: Hide text exactly when Lottie starts exiting (3375ms)
-    _hideTextTimer = Timer(const Duration(milliseconds: 3375), () {
-      if (mounted) _textController.reverse();
-    });
-
-    // Timer 3: Navigate when BOTH are completely done.
-    // Lottie ends at 4500ms. Text fade ends at 3375 + 1125 = 4500ms.
-    _sequenceTimer = Timer(const Duration(milliseconds: 4600), () {
-      if (mounted) _onGetStarted();
+    // Navigate to Login after 3 seconds
+    _navTimer = Timer(const Duration(milliseconds: 3000), () {
+      if (mounted) _onFinishSplash();
     });
   }
 
   @override
   void dispose() {
-    _showTextTimer?.cancel();
-    _hideTextTimer?.cancel();
-    _sequenceTimer?.cancel();
-    _slideController.dispose();
-    _textController.dispose();
-    _bgController.dispose();
+    _navTimer?.cancel();
+    _animController.dispose();
     super.dispose();
   }
 
-  Future<void> _onGetStarted() async {
+  Future<void> _onFinishSplash() async {
     if (_isNavigating || !mounted) return;
     setState(() => _isNavigating = true);
 
@@ -169,247 +106,346 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    const lottieWidth = 280.0;
+    final size = MediaQuery.sizeOf(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFDFDFD),
-      body: Stack(
-        children: [
-          // Soft radial glow background
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0, -0.1),
-                  radius: 0.9,
-                  colors: [
-                    Brand.red.withValues(alpha: 0.07),
-                    const Color(0xFFFDFDFD),
-                  ],
-                ),
-              ),
+      body: GestureDetector(
+        onTap: _onFinishSplash,
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFE53935), // Primary bright crimson
+                Color(0xFFD32F2F), // Core Fluup red
+                Color(0xFFB71C1C), // Deep crimson
+                Color(0xFF7F0000), // Dark red ground
+              ],
+              stops: [0.0, 0.35, 0.75, 1.0],
             ),
           ),
-
-          // Drifting ambient bubbles
-          Positioned.fill(
-            child: RepaintBoundary(
-              child: AnimatedBuilder(
-                animation: _bgController,
-                builder: (context, _) =>
-                    CustomPaint(painter: _BubblesPainter(_bgController.value)),
-              ),
-            ),
-          ),
-
-          // Main content
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Lottie Animation (+ speed streaks while moving)
-                AnimatedBuilder(
-                  animation: _horizontalSlide,
-                  builder: (context, child) {
-                    final value = _horizontalSlide.value;
-                    final offsetX = value * (screenWidth / 2 + lottieWidth / 2);
-                    final streakOpacity = (value.abs() * 1.4).clamp(0.0, 1.0);
-
-                    return Transform.translate(
-                      offset: Offset(offsetX, 0),
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Positioned(
-                            left: -110,
-                            top: lottieWidth * _streakTopFactor,
-                            child: Opacity(
-                              opacity: streakOpacity,
-                              child: const _SpeedStreaks(),
-                            ),
-                          ),
-                          child!,
-                        ],
-                      ),
-                    );
-                  },
-                  child: SizedBox(
-                    width: lottieWidth,
-                    height: lottieWidth,
-                    child: Lottie.asset(
-                      'assets/animation/moving_driver.json',
-                      fit: BoxFit.contain,
-                      alignment: Alignment.center,
-                      errorBuilder: _lottieErrorBuilder,
-                    ),
-                  ),
+          child: Stack(
+            children: [
+              // ─── 1. Bottom City Skyline Silhouette & Scooter Illustration (Screen 1) ───
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: size.height * 0.42,
+                child: CustomPaint(
+                  painter: _SplashCityAndRiderPainter(),
                 ),
+              ),
 
-                const SizedBox(height: 40),
-
-                // Animated Text
-                FadeTransition(
-                  opacity: _textFade,
-                  child: SlideTransition(
-                    position: _textSlide,
+              // ─── 2. Top Center Brand & Partner Badge (Screen 1) ───
+              SafeArea(
+                child: Center(
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
                     child: ScaleTransition(
-                      scale: _textScale,
-                      child: Column(
-                        children: [
-                          ShaderMask(
-                            blendMode: BlendMode.srcIn,
-                            shaderCallback: (bounds) => const LinearGradient(
-                              colors: [Brand.red, Brand.danger],
-                            ).createShader(bounds),
-                            child: const Text(
+                      scale: _scaleAnimation,
+                      child: SlideTransition(
+                        position: _slideAnimation,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(height: 40),
+                            // Stylized Wing Symbol (Double wing Fluup F)
+                            const _FluupWingSymbol(size: 64),
+                            const SizedBox(height: 12),
+
+                            // "Fluup" Wordmark
+                            const Text(
                               'Fluup',
                               style: TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w800,
                                 color: Colors.white,
-                                letterSpacing: -0.5,
+                                fontSize: 44,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.8,
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          AnimatedBuilder(
-                            animation: _taglineSpacing,
-                            builder: (context, _) => Text(
-                              'Your Spirits. Your Style. Delivered.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: Brand.danger,
-                                letterSpacing: _taglineSpacing.value,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+                            const SizedBox(height: 10),
 
-          // Bottom progress bar tied to the splash timeline
-          Positioned(
-            left: 56,
-            right: 56,
-            bottom: 56,
-            child: SafeArea(
-              top: false,
-              child: AnimatedBuilder(
-                animation: _slideController,
-                builder: (context, _) {
-                  final v = _slideController.value;
-                  final fadeIn = (v / 0.12).clamp(0.0, 1.0);
-                  final fadeOut = ((1 - v) / 0.1).clamp(0.0, 1.0);
-                  return Opacity(
-                    opacity: math.min(fadeIn, fadeOut),
-                    child: Container(
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Brand.red.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      alignment: Alignment.centerLeft,
-                      child: FractionallySizedBox(
-                        widthFactor: v,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Brand.red, Brand.danger],
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Brand.red.withValues(alpha: 0.35),
-                                blurRadius: 6,
+                            // "Rider" Pill Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 26,
+                                vertical: 6,
                               ),
-                            ],
-                          ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: const Text(
+                                'Rider',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+
+                            // "Alcohol Delivery Partner"
+                            Text(
+                              'Alcohol Delivery Partner',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.92),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+
+                            // Space out so content sits proudly above city silhouette
+                            SizedBox(height: size.height * 0.28),
+                          ],
                         ),
                       ),
                     ),
-                  );
-                },
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// Three fading horizontal lines trailing behind the moving car.
-class _SpeedStreaks extends StatelessWidget {
-  const _SpeedStreaks();
-
-  Widget _line(double width, double opacity) => Container(
-    width: width,
-    height: 3,
-    margin: const EdgeInsets.symmetric(vertical: 4),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(10),
-      gradient: LinearGradient(
-        colors: [
-          Brand.red.withValues(alpha: 0),
-          Brand.red.withValues(alpha: opacity),
-        ],
-      ),
-    ),
-  );
+// ────────────────────────────────────────────────────────────
+// FLUTTER VECTOR WING SYMBOL (Pixel-matched to Fluup double-wing icon)
+// ────────────────────────────────────────────────────────────
+class _FluupWingSymbol extends StatelessWidget {
+  final double size;
+  const _FluupWingSymbol({required this.size});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [_line(90, 0.35), _line(60, 0.25), _line(75, 0.3)],
+    return SizedBox(
+      width: size,
+      height: size * 0.65,
+      child: CustomPaint(
+        painter: _WingPainter(),
+      ),
     );
   }
 }
 
-/// Faint drifting circles for a soft, lively backdrop.
-class _BubblesPainter extends CustomPainter {
-  final double t; // 0..1 looping
-
-  _BubblesPainter(this.t);
-
-  static const _bubbles = <List<double>>[
-    // dx, dy, radius, speed, opacity
-    [0.15, 0.18, 46, 1, 0.05],
-    [0.85, 0.25, 30, 2, 0.06],
-    [0.25, 0.78, 38, 1, 0.05],
-    [0.80, 0.72, 54, 1, 0.04],
-    [0.50, 0.10, 18, 3, 0.07],
-    [0.10, 0.50, 22, 2, 0.06],
-    [0.92, 0.50, 16, 3, 0.07],
-  ];
-
+class _WingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    for (var i = 0; i < _bubbles.length; i++) {
-      final b = _bubbles[i];
-      final phase = (t * b[3] + i / _bubbles.length) * math.pi * 2;
-      final x = size.width * b[0] + math.sin(phase) * 16;
-      final y = size.height * b[1] + math.cos(phase) * 14;
-      final paint = Paint()..color = Brand.red.withValues(alpha: b[4]);
-      canvas.drawCircle(Offset(x, y), b[2], paint);
-    }
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    // Top wing blade
+    final topPath = Path()
+      ..moveTo(0, size.height * 0.15)
+      ..lineTo(size.width * 0.88, 0)
+      ..cubicTo(size.width * 1.0, 0, size.width * 0.95, size.height * 0.35, size.width * 0.82, size.height * 0.35)
+      ..lineTo(size.width * 0.36, size.height * 0.35)
+      ..lineTo(size.width * 0.26, size.height * 0.52)
+      ..lineTo(0, size.height * 0.15)
+      ..close();
+    canvas.drawPath(topPath, paint);
+
+    // Bottom wing blade
+    final bottomPath = Path()
+      ..moveTo(size.width * 0.12, size.height * 0.60)
+      ..lineTo(size.width * 0.72, size.height * 0.48)
+      ..cubicTo(size.width * 0.84, size.height * 0.48, size.width * 0.78, size.height * 0.78, size.width * 0.68, size.height * 0.78)
+      ..lineTo(size.width * 0.38, size.height * 0.78)
+      ..lineTo(size.width * 0.24, size.height * 1.0)
+      ..lineTo(size.width * 0.12, size.height * 0.60)
+      ..close();
+    canvas.drawPath(bottomPath, paint);
   }
 
   @override
-  bool shouldRepaint(covariant _BubblesPainter old) => old.t != t;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-Widget _lottieErrorBuilder(
-  BuildContext context,
-  Object error,
-  StackTrace? stackTrace,
-) {
-  return const Icon(Icons.delivery_dining, size: 100, color: Colors.green);
+// ────────────────────────────────────────────────────────────
+// SPLASH CITY SKYLINE & SCOOTER RIDER PAINTER (Screen 1)
+// ────────────────────────────────────────────────────────────
+class _SplashCityAndRiderPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // 1. Distant Skyline (translucent dark red silhouette)
+    final distantPaint = Paint()..color = const Color(0xFF6B0E0E).withValues(alpha: 0.55);
+    final distantPath = Path();
+    distantPath.moveTo(0, h * 0.7);
+
+    final buildings = [
+      0.0, 0.08, 0.45,
+      0.08, 0.16, 0.38,
+      0.16, 0.23, 0.50,
+      0.23, 0.32, 0.40,
+      0.32, 0.40, 0.30,
+      0.40, 0.49, 0.48,
+      0.49, 0.58, 0.35,
+      0.58, 0.68, 0.52,
+      0.68, 0.78, 0.42,
+      0.78, 0.88, 0.36,
+      0.88, 1.0, 0.46,
+    ];
+
+    for (int i = 0; i < buildings.length; i += 3) {
+      final x1 = buildings[i] * w;
+      final x2 = buildings[i + 1] * w;
+      final yTop = buildings[i + 2] * h;
+      distantPath.lineTo(x1, yTop);
+      distantPath.lineTo(x2, yTop);
+    }
+    distantPath.lineTo(w, h * 0.75);
+    distantPath.lineTo(w, h);
+    distantPath.lineTo(0, h);
+    distantPath.close();
+    canvas.drawPath(distantPath, distantPaint);
+
+    // 2. Closer Skyline (Dark silhouette with glowing window slits)
+    final skylinePaint = Paint()..color = const Color(0xFF4A0000).withValues(alpha: 0.7);
+    final skylinePath = Path();
+    skylinePath.moveTo(0, h * 0.75);
+
+    final nearBuildings = [
+      0.0, 0.12, 0.52,
+      0.12, 0.22, 0.46,
+      0.22, 0.34, 0.56,
+      0.34, 0.46, 0.42,
+      0.46, 0.60, 0.60,
+      0.60, 0.74, 0.48,
+      0.74, 0.86, 0.58,
+      0.86, 1.0, 0.50,
+    ];
+
+    for (int i = 0; i < nearBuildings.length; i += 3) {
+      final x1 = nearBuildings[i] * w;
+      final x2 = nearBuildings[i + 1] * w;
+      final yTop = nearBuildings[i + 2] * h;
+      skylinePath.lineTo(x1, yTop);
+      skylinePath.lineTo(x2, yTop);
+    }
+    skylinePath.lineTo(w, h * 0.8);
+    skylinePath.lineTo(w, h);
+    skylinePath.lineTo(0, h);
+    skylinePath.close();
+    canvas.drawPath(skylinePath, skylinePaint);
+
+    // 3. Ground / Road
+    final groundPaint = Paint()..color = const Color(0xFF330000);
+    canvas.drawRect(Rect.fromLTWH(0, h * 0.84, w, h * 0.16), groundPaint);
+
+    // 4. Scooter & Delivery Rider
+    final rx = w * 0.42; // Center-ish rider
+    final ry = h * 0.80; // Ground contact level
+
+    _drawRider(canvas, rx, ry);
+  }
+
+  void _drawRider(Canvas canvas, double cx, double groundY) {
+    final redPaint = Paint()..color = const Color(0xFFE53935);
+    final darkRedPaint = Paint()..color = const Color(0xFFB71C1C);
+    final blackPaint = Paint()..color = const Color(0xFF1A1A1A);
+    final rimPaint = Paint()..color = const Color(0xFFE0E0E0);
+    final whitePaint = Paint()..color = Colors.white;
+
+    // Rear Wheel
+    final rearWheelCenter = Offset(cx - 52, groundY - 14);
+    canvas.drawCircle(rearWheelCenter, 18, blackPaint);
+    canvas.drawCircle(rearWheelCenter, 11, rimPaint);
+    canvas.drawCircle(rearWheelCenter, 4, blackPaint);
+
+    // Front Wheel
+    final frontWheelCenter = Offset(cx + 48, groundY - 14);
+    canvas.drawCircle(frontWheelCenter, 18, blackPaint);
+    canvas.drawCircle(frontWheelCenter, 11, rimPaint);
+    canvas.drawCircle(frontWheelCenter, 4, blackPaint);
+
+    // Scooter Body (Red Moped)
+    final scooterBody = Path()
+      ..moveTo(cx - 56, groundY - 26)
+      ..lineTo(cx - 16, groundY - 26)
+      ..lineTo(cx + 8, groundY - 20)
+      ..lineTo(cx + 26, groundY - 34)
+      ..lineTo(cx + 42, groundY - 38)
+      ..lineTo(cx + 48, groundY - 22)
+      ..lineTo(cx + 36, groundY - 14)
+      ..lineTo(cx - 20, groundY - 14)
+      ..lineTo(cx - 52, groundY - 18)
+      ..close();
+    canvas.drawPath(scooterBody, redPaint);
+
+    // Handlebar & Headlight
+    canvas.drawLine(Offset(cx + 26, groundY - 34), Offset(cx + 32, groundY - 60), darkRedPaint..strokeWidth = 4);
+    canvas.drawCircle(Offset(cx + 33, groundY - 60), 6, redPaint);
+    canvas.drawCircle(Offset(cx + 37, groundY - 60), 3, whitePaint); // Headlamp
+
+    // Delivery Box on Back (Screen 1 has big red box with bottle silhouettes)
+    final boxRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(cx - 68, groundY - 78, 38, 44),
+      const Radius.circular(6),
+    );
+    canvas.drawRRect(boxRect, redPaint);
+
+    // Bottle Graphic on Delivery Box
+    final bottlePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.9)
+      ..style = PaintingStyle.fill;
+    // Wine bottle 1
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 58, groundY - 62, 6, 18), const Radius.circular(2)), bottlePaint);
+    canvas.drawRect(Rect.fromLTWH(cx - 56.5, groundY - 70, 3, 8), bottlePaint);
+    // Wine bottle 2
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 48, groundY - 60, 7, 16), const Radius.circular(2)), bottlePaint);
+    canvas.drawRect(Rect.fromLTWH(cx - 46, groundY - 67, 3, 7), bottlePaint);
+
+    // Rider Legs & Torso (Red Jacket)
+    final riderTorso = Path()
+      ..moveTo(cx - 24, groundY - 32)
+      ..lineTo(cx - 10, groundY - 74)
+      ..lineTo(cx + 8, groundY - 74)
+      ..lineTo(cx + 12, groundY - 42)
+      ..lineTo(cx + 18, groundY - 24)
+      ..lineTo(cx + 8, groundY - 24)
+      ..lineTo(cx - 4, groundY - 38)
+      ..close();
+    canvas.drawPath(riderTorso, redPaint);
+
+    // Arms extending to handlebar
+    final armPaint = Paint()
+      ..color = darkRedPaint.color
+      ..strokeWidth = 6
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(cx + 4, groundY - 66), Offset(cx + 30, groundY - 58), armPaint);
+
+    // Rider Helmet / Head (Screen 1 has red helmet with visor facing right)
+    final headCenter = Offset(cx + 3, groundY - 86);
+    canvas.drawCircle(headCenter, 14, redPaint);
+    // Dark Visor
+    final visorPaint = Paint()..color = const Color(0xFF1E293B);
+    final visorPath = Path()
+      ..moveTo(cx + 6, groundY - 92)
+      ..lineTo(cx + 16, groundY - 88)
+      ..lineTo(cx + 14, groundY - 80)
+      ..lineTo(cx + 5, groundY - 82)
+      ..close();
+    canvas.drawPath(visorPath, visorPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
