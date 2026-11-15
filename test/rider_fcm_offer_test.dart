@@ -1,6 +1,5 @@
 import 'package:adm_rider/core/shared/helpers/notification_sound_helper.dart';
 import 'package:adm_rider/modules/fulfillment/models/delivery_order.dart';
-import 'package:adm_rider/modules/fulfillment/providers/fulfillment_provider.dart';
 import 'package:adm_rider/modules/fulfillment/screens/new_order_request_modal.dart';
 import 'package:adm_rider/modules/notifications/services/fcm_service.dart';
 import 'package:flutter/material.dart';

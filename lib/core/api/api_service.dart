@@ -217,6 +217,40 @@ class ApiService {
     );
   }
 
+  /// GET /rider/order-fulfillment/active
+  /// Retrieves the current rider active state & ongoing ride details.
+  /// Single source of truth for the rider app.
+  Future<BaseResponseModel> getActiveOrderFulfillment() async {
+    return _handler.get(
+      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.activeOrderFulfillment}',
+      fromJson: (json) => BaseResponseModel.fromJson(json),
+      errorMessage: 'Failed to retrieve active order fulfillment state',
+    );
+  }
+
+  /// GET /rider/order-fulfillment/{orderId}/navigation
+  /// Computes Routes API two-wheeler route polylines, ETAs, and turn-by-turn maneuvers
+  /// for Rider -> Store (pickup), Rider/Store -> Customer (delivery), or Customer -> Store (return).
+  Future<BaseResponseModel> getOrderNavigation(
+    int orderId, {
+    String? leg,
+    double? riderLat,
+    double? riderLng,
+  }) async {
+    final queryParams = <String, dynamic>{
+      if (leg != null && leg.isNotEmpty) 'leg': leg,
+      if (riderLat != null) 'riderLat': riderLat,
+      if (riderLng != null) 'riderLng': riderLng,
+    };
+
+    return _handler.get(
+      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.orderNavigation(orderId)}',
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      fromJson: (json) => BaseResponseModel.fromJson(json),
+      errorMessage: 'Failed to retrieve navigation route',
+    );
+  }
+
   /// POST /rider/order-fulfillment/{orderId}/respond
   Future<BaseResponseModel> respondOffer({
     required int orderId,

@@ -44,6 +44,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _initTwoWheelerIcon();
     _checkLocationPermission();
     _initBatteryTracking();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(fulfillmentProvider.notifier).checkAndSyncActiveState();
+    });
   }
 
   Future<void> _initTwoWheelerIcon() async {
@@ -173,9 +176,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         setState(() {
           _currentLocation = next;
         });
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLng(next),
-        );
+        _mapController?.animateCamera(CameraUpdate.newLatLng(next));
       }
     });
 
@@ -186,6 +187,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final fulfillment = ref.watch(fulfillmentProvider);
     final isOnline = fulfillment.isOnline;
     final activeOrder = fulfillment.activeOrder;
+    // ignore: unused_local_variable
     final earnings = ref.watch(earningsProvider).summary;
 
     return Scaffold(
@@ -203,7 +205,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Marker(
                 markerId: const MarkerId('rider_loc'),
                 position: currentLocation,
-                icon: _twoWheelerIcon ??
+                icon:
+                    _twoWheelerIcon ??
                     BitmapDescriptor.defaultMarkerWithHue(
                       BitmapDescriptor.hueRed,
                     ),
@@ -420,220 +423,149 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             left: 20,
             right: 20,
             bottom: 20,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Active Ongoing Order Alert Banner
-                if (activeOrder != null &&
-                    activeOrder.currentStep != DeliveryFlowStep.offerReceived &&
-                    activeOrder.currentStep !=
-                        DeliveryFlowStep.deliveryCompleted)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Brand.red,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Brand.red.withValues(alpha: 0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.delivery_dining,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+            child: SafeArea(
+              bottom: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Active Ongoing Order Alert Banner
+                  if (activeOrder != null &&
+                      activeOrder.currentStep !=
+                          DeliveryFlowStep.offerReceived &&
+                      activeOrder.currentStep !=
+                          DeliveryFlowStep.deliveryCompleted)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Brand.red,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Brand.red.withValues(alpha: 0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
                               children: [
-                                Text(
-                                  'Active Order: ${activeOrder.orderNumber}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
+                                const Icon(
+                                  Icons.delivery_dining,
+                                  color: Colors.white,
+                                  size: 24,
                                 ),
-                                Text(
-                                  'Tap to resume navigation',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.85),
-                                    fontSize: 11,
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Active Order: ${activeOrder.orderNumber}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                      Text(
+                                        'Tap to resume navigation',
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.85,
+                                          ),
+                                          fontSize: 11,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ActiveDeliveryScreen(),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ActiveDeliveryScreen(),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Brand.red,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
                               ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Brand.red,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text(
-                            'Open',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                            child: const Text(
+                              'Open',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
-                // Quick Stats Card: Today's Trips, Earnings, Online Time (from API)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 14,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      // Today's Trips
-                      _buildQuickStatItem(
-                        icon: Icons.shopping_bag_outlined,
-                        iconColor: Brand.red,
-                        title: "Today's Trips",
-                        value: '${earnings.totalTrips}',
-                      ),
-                      Container(width: 1, height: 36, color: const Color(0xFFF1F5F9)),
-
-                      // Earnings
-                      _buildQuickStatItem(
-                        icon: Icons.lock_outline,
-                        iconColor: Brand.warning,
-                        title: 'Earnings',
-                        value: earnings.formattedTotal,
-                      ),
-                      Container(width: 1, height: 36, color: const Color(0xFFF1F5F9)),
-
-                      // Online Time
-                      _buildQuickStatItem(
-                        icon: Icons.access_time,
-                        iconColor: Colors.blue,
-                        title: 'Online Time',
-                        value: earnings.onlineTime,
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // Button to simulate / trigger incoming order (for testing & demoing Screen 4)
-                if (activeOrder == null ||
-                    activeOrder.currentStep ==
-                        DeliveryFlowStep.deliveryCompleted)
-                  TextButton.icon(
-                    onPressed: () => _showNewOrderSheet(context),
-                    icon: const Icon(
-                      Icons.flash_on,
-                      color: Brand.red,
-                      size: 16,
-                    ),
-                    label: const Text(
-                      'Simulate New Delivery Offer',
-                      style: TextStyle(
+                  // Button to simulate / trigger incoming order (for testing & demoing Screen 4)
+                  if (activeOrder == null ||
+                      activeOrder.currentStep ==
+                          DeliveryFlowStep.deliveryCompleted)
+                    TextButton.icon(
+                      onPressed: () => _showNewOrderSheet(context),
+                      icon: const Icon(
+                        Icons.flash_on,
                         color: Brand.red,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        size: 16,
+                      ),
+                      label: const Text(
+                        'Simulate New Delivery Offer',
+                        style: TextStyle(
+                          color: Brand.red,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        backgroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
                       ),
                     ),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      backgroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildQuickStatItem({
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String value,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: iconColor, size: 20),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 11,
-            color: Color(0xFF64748B),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1E293B),
-          ),
-        ),
-      ],
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:adm_rider/core/api/api_service.dart';
 import 'package:adm_rider/core/shared/helpers/rider_location_tracker.dart';
 import 'package:adm_rider/modules/fulfillment/models/delivery_order.dart';
+import 'package:adm_rider/modules/fulfillment/models/rider_active_state_model.dart';
 import 'package:adm_rider/modules/fulfillment/models/trip_model.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'package:intl/intl.dart';
 class FulfillmentState {
   final bool isOnline;
   final DeliveryOrder? activeOrder;
+  final RiderActiveStateResponse? activeStateResponse;
   final List<TripItem> trips;
   final bool isLoading;
   final String? errorMessage;
@@ -17,6 +19,7 @@ class FulfillmentState {
   const FulfillmentState({
     this.isOnline = false,
     this.activeOrder,
+    this.activeStateResponse,
     this.trips = const [],
     this.isLoading = false,
     this.errorMessage,
@@ -26,6 +29,8 @@ class FulfillmentState {
     bool? isOnline,
     DeliveryOrder? activeOrder,
     bool clearActiveOrder = false,
+    RiderActiveStateResponse? activeStateResponse,
+    bool clearActiveState = false,
     List<TripItem>? trips,
     bool? isLoading,
     String? errorMessage,
@@ -33,6 +38,9 @@ class FulfillmentState {
     return FulfillmentState(
       isOnline: isOnline ?? this.isOnline,
       activeOrder: clearActiveOrder ? null : (activeOrder ?? this.activeOrder),
+      activeStateResponse: clearActiveState
+          ? null
+          : (activeStateResponse ?? this.activeStateResponse),
       trips: trips ?? this.trips,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
@@ -85,6 +93,9 @@ class FulfillmentNotifier extends Notifier<FulfillmentState> {
         longitude: longitude,
         batteryLevel: batteryLevel,
       );
+      if (isOnline) {
+        await checkAndSyncActiveState();
+      }
     } catch (e) {
       debugPrint('Failed to sync rider online status: $e');
     }
@@ -95,8 +106,49 @@ class FulfillmentNotifier extends Notifier<FulfillmentState> {
     state = const FulfillmentState(
       isOnline: false,
       activeOrder: null,
+      activeStateResponse: null,
       trips: [],
     );
+  }
+
+  /// Single source of truth sync API for rider mobile app.
+  /// Calls GET /rider/order-fulfillment/active
+  /// Synchronizes active offer preview (ACTIVE_OFFER) or active delivery details (ACTIVE_DELIVERY) or IDLE.
+  Future<RiderActiveStateResponse?> checkAndSyncActiveState() async {
+    try {
+      final res = await _apiService.getActiveOrderFulfillment();
+      if (res.data != null && res.data is Map) {
+        final dataMap = Map<String, dynamic>.from(res.data as Map);
+        final activeState = RiderActiveStateResponse.fromJson(dataMap);
+
+        if (activeState.stateType == RiderStateType.activeOffer &&
+            activeState.activeOffer != null) {
+          final mappedOrder = DeliveryOrder.fromActiveOffer(activeState.activeOffer!);
+          state = state.copyWith(
+            activeStateResponse: activeState,
+            activeOrder: mappedOrder,
+          );
+        } else if (activeState.stateType == RiderStateType.activeDelivery &&
+            activeState.activeDelivery != null) {
+          final mappedOrder = DeliveryOrder.fromActiveDelivery(activeState.activeDelivery!);
+          state = state.copyWith(
+            activeStateResponse: activeState,
+            activeOrder: mappedOrder,
+          );
+        } else if (activeState.stateType == RiderStateType.idle) {
+          // If server state is IDLE, clear any lingering unaccepted offer
+          state = state.copyWith(
+            activeStateResponse: activeState,
+            clearActiveOrder: state.activeOrder?.currentStep == DeliveryFlowStep.offerReceived,
+          );
+        }
+
+        return activeState;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error synchronizing rider active state: $e');
+    }
+    return null;
   }
 
   Future<void> loadTrips() async {

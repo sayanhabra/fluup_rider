@@ -1,3 +1,4 @@
+import 'package:adm_rider/modules/fulfillment/models/rider_active_state_model.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 enum DeliveryFlowStep {
@@ -33,6 +34,10 @@ class DeliveryOrder {
   final String storeOtp;
   final String customerOtp;
   final DeliveryFlowStep currentStep;
+  final RiderActiveDeliveryDetail? activeDeliveryDetail;
+  final int totalItems;
+  final int totalVolumeMl;
+  final List<ActiveDeliveryItem> items;
 
   const DeliveryOrder({
     required this.orderId,
@@ -56,6 +61,10 @@ class DeliveryOrder {
     this.storeOtp = '7349',
     this.customerOtp = '5826',
     this.currentStep = DeliveryFlowStep.offerReceived,
+    this.activeDeliveryDetail,
+    this.totalItems = 1,
+    this.totalVolumeMl = 750,
+    this.items = const [],
   });
 
   int get totalEarningsPaisa => earningsPaisa + incentivePaisa;
@@ -87,6 +96,10 @@ class DeliveryOrder {
     String? storeOtp,
     String? customerOtp,
     DeliveryFlowStep? currentStep,
+    RiderActiveDeliveryDetail? activeDeliveryDetail,
+    int? totalItems,
+    int? totalVolumeMl,
+    List<ActiveDeliveryItem>? items,
   }) {
     return DeliveryOrder(
       orderId: orderId ?? this.orderId,
@@ -110,6 +123,97 @@ class DeliveryOrder {
       storeOtp: storeOtp ?? this.storeOtp,
       customerOtp: customerOtp ?? this.customerOtp,
       currentStep: currentStep ?? this.currentStep,
+      activeDeliveryDetail: activeDeliveryDetail ?? this.activeDeliveryDetail,
+      totalItems: totalItems ?? this.totalItems,
+      totalVolumeMl: totalVolumeMl ?? this.totalVolumeMl,
+      items: items ?? this.items,
+    );
+  }
+
+  /// Maps an active offer preview from GET /rider/order-fulfillment/active
+  factory DeliveryOrder.fromActiveOffer(RiderOfferPreview offer) {
+    final double dist = offer.distanceKm ?? 3.5;
+    return DeliveryOrder(
+      orderId: offer.orderId,
+      orderNumber: offer.orderNumber.startsWith('#')
+          ? offer.orderNumber
+          : '#${offer.orderNumber}',
+      storeName: offer.storeName,
+      storeAddress: offer.storeAddress,
+      storeLocation: LatLng(offer.storeLatitude, offer.storeLongitude),
+      storeDistanceText: '${dist.toStringAsFixed(1)} km',
+      storeTimeText: '${offer.remainingSeconds}s remaining',
+      customerName: 'Customer (${offer.deliveryArea})',
+      customerPhone: '',
+      customerAddress: offer.deliveryArea,
+      customerLocation: LatLng(
+        offer.storeLatitude + 0.015,
+        offer.storeLongitude + 0.015,
+      ),
+      customerDistanceText: '${(dist * 0.7).toStringAsFixed(1)} km',
+      customerTimeText: '12 min',
+      totalDistanceKm: dist,
+      estimatedMinutes: 15,
+      orderValuePaisa: 0,
+      earningsPaisa: offer.estimatedEarningsPaisa,
+      incentivePaisa: 0,
+      currentStep: DeliveryFlowStep.offerReceived,
+      totalItems: offer.totalItems,
+      totalVolumeMl: offer.totalVolumeMl,
+    );
+  }
+
+  /// Maps ongoing active delivery details from GET /rider/order-fulfillment/active
+  factory DeliveryOrder.fromActiveDelivery(RiderActiveDeliveryDetail detail) {
+    final status = detail.fulfillmentStatus.toUpperCase();
+
+    // Map fulfillmentStatus to DeliveryFlowStep
+    DeliveryFlowStep step = DeliveryFlowStep.headingToStore;
+    if (status.contains('ARRIVED_AT_STORE')) {
+      step = DeliveryFlowStep.arrivedAtStore;
+    } else if (status.contains('PICKED_UP')) {
+      step = DeliveryFlowStep.pickupConfirmed;
+    } else if (status.contains('OUT_FOR_DELIVERY')) {
+      step = DeliveryFlowStep.headingToCustomer;
+    } else if (status.contains('ARRIVED_AT_CUSTOMER')) {
+      step = DeliveryFlowStep.enterCustomerOtp;
+    } else if (status.contains('DELIVERED')) {
+      step = DeliveryFlowStep.deliveryCompleted;
+    }
+
+    final double storeLat = detail.store.latitude != 0.0 ? detail.store.latitude : 22.5892;
+    final double storeLng = detail.store.longitude != 0.0 ? detail.store.longitude : 88.4067;
+    final double custLat = detail.customer.latitude != 0.0 ? detail.customer.latitude : 22.5726;
+    final double custLng = detail.customer.longitude != 0.0 ? detail.customer.longitude : 88.4337;
+
+    return DeliveryOrder(
+      orderId: detail.orderId,
+      orderNumber: detail.orderNumber.startsWith('#')
+          ? detail.orderNumber
+          : '#${detail.orderNumber}',
+      storeName: detail.store.name,
+      storeAddress: detail.store.address,
+      storeLocation: LatLng(storeLat, storeLng),
+      storeDistanceText: '2.5 km',
+      storeTimeText: '8 min',
+      customerName: detail.customer.name,
+      customerPhone: detail.customer.phone,
+      customerAddress: detail.customer.pincode.isNotEmpty
+          ? '${detail.customer.deliveryAddress}, ${detail.customer.pincode}'
+          : detail.customer.deliveryAddress,
+      customerLocation: LatLng(custLat, custLng),
+      customerDistanceText: '3.8 km',
+      customerTimeText: '11 min',
+      totalDistanceKm: 6.3,
+      estimatedMinutes: 19,
+      orderValuePaisa: 0,
+      earningsPaisa: detail.deliveryFeePaisa,
+      incentivePaisa: detail.tipAmountPaisa,
+      currentStep: step,
+      activeDeliveryDetail: detail,
+      totalItems: detail.totalItems,
+      totalVolumeMl: detail.totalVolumeMl,
+      items: detail.items,
     );
   }
 

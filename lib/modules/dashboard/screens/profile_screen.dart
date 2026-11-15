@@ -303,22 +303,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           );
                         },
                       ),
-                      // const Divider(
-                      //   height: 1,
-                      //   indent: 56,
-                      //   color: Color(0xFFF1F5F9),
-                      // ),
-                      // _buildMenuItem(
-                      //   icon: Icons.settings_outlined,
-                      //   title: 'App Settings',
-                      //   onTap: () {
-                      //     Navigator.of(context).push(
-                      //       MaterialPageRoute(
-                      //         builder: (_) => const SettingsScreen(),
-                      //       ),
-                      //     );
-                      //   },
-                      // ),
+                      const Divider(
+                        height: 1,
+                        indent: 56,
+                        color: Color(0xFFF1F5F9),
+                      ),
+                      _buildMenuItem(
+                        icon: Icons.settings_outlined,
+                        title: 'App Settings',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
                       const Divider(
                         height: 1,
                         indent: 56,

@@ -3,7 +3,9 @@ import 'package:adm_rider/core/config/brand.dart';
 import 'package:adm_rider/core/shared/helpers/rider_location_tracker.dart';
 import 'package:adm_rider/core/shared/helpers/two_wheeler_marker_helper.dart';
 import 'package:adm_rider/modules/fulfillment/models/delivery_order.dart';
+import 'package:adm_rider/modules/fulfillment/models/rider_navigation_model.dart';
 import 'package:adm_rider/modules/fulfillment/providers/fulfillment_provider.dart';
+import 'package:adm_rider/modules/fulfillment/providers/rider_navigation_provider.dart';
 import 'package:adm_rider/modules/fulfillment/widgets/custom_numeric_keypad.dart';
 import 'package:adm_rider/modules/fulfillment/widgets/otp_code_boxes.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +28,23 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   void initState() {
     super.initState();
     _initTwoWheelerIcon();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initNavigationForCurrentStep();
+    });
+  }
+
+  void _initNavigationForCurrentStep() {
+    final order = ref.read(fulfillmentProvider).activeOrder ?? DeliveryOrder.sample();
+    final riderLoc = ref.read(riderLiveLocationProvider);
+    final isCustomerLeg = order.currentStep == DeliveryFlowStep.headingToCustomer ||
+        order.currentStep == DeliveryFlowStep.enterCustomerOtp;
+    final leg = isCustomerLeg ? NavigationLegEnum.delivery : NavigationLegEnum.pickup;
+    ref.read(riderNavigationProvider.notifier).fetchNavigation(
+          order.orderId,
+          leg: leg,
+          riderLat: riderLoc?.latitude,
+          riderLng: riderLoc?.longitude,
+        );
   }
 
   Future<void> _initTwoWheelerIcon() async {
@@ -77,6 +96,12 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   // 1. HEADING TO STORE (Screen 5)
   // ============================================================
   Widget _buildHeadingToStore(BuildContext context, DeliveryOrder order) {
+    final navState = ref.watch(riderNavigationProvider);
+    final riderPos = ref.watch(riderLiveLocationProvider) ?? const LatLng(22.5820, 88.3980);
+    final polylinePoints = navState.routePoints.isNotEmpty
+        ? navState.routePoints
+        : [riderPos, order.storeLocation];
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -140,7 +165,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
               Marker(
                 markerId: const MarkerId('rider_bike'),
-                position: ref.watch(riderLiveLocationProvider) ?? const LatLng(22.5820, 88.3980),
+                position: riderPos,
                 icon: _twoWheelerIcon ??
                     BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
                 anchor: const Offset(0.5, 0.5),
@@ -149,17 +174,33 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             },
             polylines: {
               Polyline(
-                polylineId: const PolylineId('toStore'),
+                polylineId: const PolylineId('toStoreRoute'),
                 color: Colors.blue.shade600,
-                width: 5,
-                points: [
-                  const LatLng(22.5820, 88.3980),
-                  order.storeLocation,
-                ],
+                width: 6,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                jointType: JointType.round,
+                points: polylinePoints,
               ),
             },
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
+          ),
+
+          // Top Turn-by-Turn Navigation HUD (Screen 5)
+          Positioned(
+            top: 14,
+            left: 16,
+            right: 16,
+            child: _buildNavigationHud(context, order, navState),
+          ),
+
+          // Navigation Leg Selector
+          Positioned(
+            top: 86,
+            left: 16,
+            right: 16,
+            child: _buildLegSelectorChips(context, order, navState),
           ),
 
           // Bottom Store Card & Navigation Action
@@ -228,9 +269,16 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                       ),
                     ],
                   ),
+                  _buildOrderItemsSummary(order),
                   const SizedBox(height: 16),
                   Row(
                     children: [
+                      IconButton.filledTonal(
+                        onPressed: () => _showManeuverStepsModal(context, navState),
+                        icon: const Icon(Icons.list_alt_rounded),
+                        tooltip: 'Turn steps',
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () {
@@ -618,6 +666,13 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                   onPressed: () {
                     setState(() => _enteredOtp = order.customerOtp);
                     ref.read(fulfillmentProvider.notifier).proceedToHeadingToCustomer();
+                    final riderLoc = ref.read(riderLiveLocationProvider);
+                    ref.read(riderNavigationProvider.notifier).changeLeg(
+                          order.orderId,
+                          NavigationLegEnum.delivery,
+                          riderLat: riderLoc?.latitude,
+                          riderLng: riderLoc?.longitude,
+                        );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Brand.red,
@@ -652,6 +707,12 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   // 5. HEADING TO CUSTOMER (Screen 9)
   // ============================================================
   Widget _buildHeadingToCustomer(BuildContext context, DeliveryOrder order) {
+    final navState = ref.watch(riderNavigationProvider);
+    final riderPos = ref.watch(riderLiveLocationProvider) ?? order.storeLocation;
+    final polylinePoints = navState.routePoints.isNotEmpty
+        ? navState.routePoints
+        : [order.storeLocation, order.customerLocation];
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -715,7 +776,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
               Marker(
                 markerId: const MarkerId('rider_bike'),
-                position: ref.watch(riderLiveLocationProvider) ?? order.storeLocation,
+                position: riderPos,
                 icon: _twoWheelerIcon ??
                     BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
                 anchor: const Offset(0.5, 0.5),
@@ -724,17 +785,33 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             },
             polylines: {
               Polyline(
-                polylineId: const PolylineId('toCustomer'),
+                polylineId: const PolylineId('toCustomerRoute'),
                 color: Brand.red,
-                width: 5,
-                points: [
-                  order.storeLocation,
-                  order.customerLocation,
-                ],
+                width: 6,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                jointType: JointType.round,
+                points: polylinePoints,
               ),
             },
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
+          ),
+
+          // Top Turn-by-Turn Navigation HUD (Screen 9)
+          Positioned(
+            top: 14,
+            left: 16,
+            right: 16,
+            child: _buildNavigationHud(context, order, navState),
+          ),
+
+          // Navigation Leg Selector
+          Positioned(
+            top: 86,
+            left: 16,
+            right: 16,
+            child: _buildLegSelectorChips(context, order, navState),
           ),
 
           // Bottom Customer Card & Navigation Action
@@ -803,9 +880,16 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                       ),
                     ],
                   ),
+                  _buildOrderItemsSummary(order),
                   const SizedBox(height: 16),
                   Row(
                     children: [
+                      IconButton.filledTonal(
+                        onPressed: () => _showManeuverStepsModal(context, navState),
+                        icon: const Icon(Icons.list_alt_rounded),
+                        tooltip: 'Turn steps',
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () {
@@ -1131,6 +1215,429 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // TURN-BY-TURN NAVIGATION HUD & ROUTE CONTROLS
+  // ============================================================
+
+  Widget _buildNavigationHud(
+    BuildContext context,
+    DeliveryOrder order,
+    RiderNavigationState navState,
+  ) {
+    final currentStep = navState.currentStep;
+    final totalSteps = navState.navigation?.route.steps.length ?? 0;
+    final stepNum = (navState.currentStepIndex + 1);
+
+    return InkWell(
+      onTap: () => _showManeuverStepsModal(context, navState),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Maneuver Turn Icon
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  width: 1,
+                ),
+              ),
+              child: Icon(
+                currentStep?.getManeuverIcon() ?? Icons.straight_rounded,
+                color: const Color(0xFF38BDF8),
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Maneuver instruction and distance
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        currentStep != null && currentStep.distanceText.isNotEmpty
+                            ? 'In ${currentStep.distanceText}'
+                            : 'Route Navigation',
+                        style: const TextStyle(
+                          color: Color(0xFF38BDF8),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (totalSteps > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '$stepNum of $totalSteps',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    currentStep?.cleanInstruction.isNotEmpty == true
+                        ? currentStep!.cleanInstruction
+                        : 'Proceed along two-wheeler route',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // ETA & distance summary pill
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Brand.red,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    navState.totalDurationText,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  navState.totalDistanceText,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegSelectorChips(
+    BuildContext context,
+    DeliveryOrder order,
+    RiderNavigationState navState,
+  ) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: NavigationLegEnum.values.map((leg) {
+          final isSelected = navState.selectedLeg == leg;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              avatar: Icon(
+                leg.icon,
+                size: 15,
+                color: isSelected ? Colors.white : const Color(0xFF475569),
+              ),
+              label: Text(
+                leg.label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? Colors.white : const Color(0xFF1E293B),
+                ),
+              ),
+              selected: isSelected,
+              backgroundColor: Colors.white,
+              selectedColor: Brand.red,
+              showCheckmark: false,
+              elevation: 2,
+              pressElevation: 4,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color: isSelected ? Brand.red : const Color(0xFFE2E8F0),
+                  width: 1,
+                ),
+              ),
+              onSelected: (_) {
+                final riderLoc = ref.read(riderLiveLocationProvider);
+                ref.read(riderNavigationProvider.notifier).changeLeg(
+                      order.orderId,
+                      leg,
+                      riderLat: riderLoc?.latitude,
+                      riderLng: riderLoc?.longitude,
+                    );
+              },
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  void _showManeuverStepsModal(
+    BuildContext context,
+    RiderNavigationState navState,
+  ) {
+    final steps = navState.navigation?.route.steps ?? [];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Material(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.75,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Turn-by-Turn Route',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      Text(
+                        '${navState.selectedLeg.label} • ${navState.totalDistanceText} (${navState.totalDurationText})',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              if (navState.navigation?.routeWarning.isNotEmpty == true) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: Color(0xFFD97706), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          navState.navigation!.routeWarning,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF92400E),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              Expanded(
+                child: steps.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No step maneuvers available',
+                          style: TextStyle(color: Color(0xFF94A3B8)),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: steps.length,
+                        separatorBuilder: (context, index) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final step = steps[index];
+                          final isCurrent = index == navState.currentStepIndex;
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 4,
+                            ),
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isCurrent ? Brand.red : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                step.getManeuverIcon(),
+                                color: isCurrent ? Colors.white : const Color(0xFF334155),
+                                size: 22,
+                              ),
+                            ),
+                            title: Text(
+                              step.cleanInstruction,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                                color: const Color(0xFF1E293B),
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${step.distanceText} • ${step.durationText}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                            trailing: isCurrent
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Brand.redLight,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'CURRENT',
+                                      style: TextStyle(
+                                        color: Brand.red,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                            onTap: () {
+                              ref.read(riderNavigationProvider.notifier).selectStep(index);
+                              Navigator.of(ctx).pop();
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+    );
+  }
+
+  Widget _buildOrderItemsSummary(DeliveryOrder order) {
+    if (order.items.isEmpty && order.totalItems <= 1) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '📦 Package Contents (${order.totalItems} items • ${order.totalVolumeMl} ml)',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF334155),
+                ),
+              ),
+            ],
+          ),
+          if (order.items.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ...order.items.take(3).map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '• ${item.productName}${item.packageSize != null ? " (${item.packageSize})" : ""} x${item.quantity}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

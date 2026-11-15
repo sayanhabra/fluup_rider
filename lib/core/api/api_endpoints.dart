@@ -14,6 +14,8 @@ class ApiEndpoints {
   static const String strubmitVerification = '/auth/verification';
 
   // ==================== ORDER FULFILLMENT ====================
+  static const String activeOrderFulfillment = '/order-fulfillment/active';
+  static String orderNavigation(int orderId) => '/order-fulfillment/$orderId/navigation';
   static const String telemetryLocation = '/order-fulfillment/location';
   static const String riderAvailabilityStatus = '/order-fulfillment/status';
   static String respondOffer(int orderId) => '/order-fulfillment/$orderId/respond';
