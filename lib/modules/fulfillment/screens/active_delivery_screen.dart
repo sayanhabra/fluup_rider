@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:adm_rider/core/config/brand.dart';
 import 'package:adm_rider/core/shared/helpers/rider_location_tracker.dart';
 import 'package:adm_rider/core/shared/helpers/two_wheeler_marker_helper.dart';
+import 'package:adm_rider/core/shared/helpers/two_wheeler_route_helper.dart';
 import 'package:adm_rider/modules/fulfillment/models/delivery_order.dart';
 import 'package:adm_rider/modules/fulfillment/models/rider_navigation_model.dart';
 import 'package:adm_rider/modules/fulfillment/providers/fulfillment_provider.dart';
@@ -9,6 +10,7 @@ import 'package:adm_rider/modules/fulfillment/providers/rider_navigation_provide
 import 'package:adm_rider/modules/fulfillment/widgets/custom_numeric_keypad.dart';
 import 'package:adm_rider/modules/fulfillment/widgets/otp_code_boxes.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -21,30 +23,73 @@ class ActiveDeliveryScreen extends ConsumerStatefulWidget {
 
 class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   String _enteredOtp = '';
+  late final TextEditingController _otpTextController;
+  late final FocusNode _otpFocusNode;
   bool _isAgeVerified = true;
   BitmapDescriptor? _twoWheelerIcon;
+  GoogleMapController? _mapController;
 
   @override
   void initState() {
     super.initState();
+    _enteredOtp = '';
+    _otpTextController = TextEditingController();
+    _otpFocusNode = FocusNode();
     _initTwoWheelerIcon();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(fulfillmentProvider.notifier).checkAndSyncActiveState();
       _initNavigationForCurrentStep();
+    });
+  }
+
+  @override
+  void dispose() {
+    _otpTextController.dispose();
+    _otpFocusNode.dispose();
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  void _resetOtp() {
+    setState(() {
+      _enteredOtp = '';
+      _otpTextController.clear();
     });
   }
 
   void _initNavigationForCurrentStep() {
     final order = ref.read(fulfillmentProvider).activeOrder ?? DeliveryOrder.sample();
     final riderLoc = ref.read(riderLiveLocationProvider);
+    final effectiveRiderLat = riderLoc?.latitude ?? (order.storeLocation.latitude - 0.0015);
+    final effectiveRiderLng = riderLoc?.longitude ?? (order.storeLocation.longitude - 0.0015);
+
     final isCustomerLeg = order.currentStep == DeliveryFlowStep.headingToCustomer ||
         order.currentStep == DeliveryFlowStep.enterCustomerOtp;
     final leg = isCustomerLeg ? NavigationLegEnum.delivery : NavigationLegEnum.pickup;
     ref.read(riderNavigationProvider.notifier).fetchNavigation(
           order.orderId,
           leg: leg,
-          riderLat: riderLoc?.latitude,
-          riderLng: riderLoc?.longitude,
+          riderLat: effectiveRiderLat,
+          riderLng: effectiveRiderLng,
+          storeLocation: order.storeLocation,
+          customerLocation: order.customerLocation,
         );
+  }
+
+  void _fitMapToRoute(DeliveryOrder order, List<LatLng> points, LatLng riderPos) {
+    if (_mapController == null) return;
+    final isCustomer = order.currentStep == DeliveryFlowStep.headingToCustomer ||
+        order.currentStep == DeliveryFlowStep.enterCustomerOtp;
+    final destination = isCustomer ? order.customerLocation : order.storeLocation;
+    final allPoints = <LatLng>[
+      riderPos,
+      destination,
+      ...points,
+    ];
+    final bounds = TwoWheelerRouteHelper.calculateBounds(allPoints, paddingRatio: 0.0015);
+    if (bounds != null) {
+      _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
+    }
   }
 
   Future<void> _initTwoWheelerIcon() async {
@@ -62,6 +107,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     if (_enteredOtp.length < maxLen) {
       setState(() {
         _enteredOtp += digit;
+        _otpTextController.text = _enteredOtp;
+        _otpTextController.selection = TextSelection.collapsed(offset: _enteredOtp.length);
       });
     }
   }
@@ -70,12 +117,41 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     if (_enteredOtp.isNotEmpty) {
       setState(() {
         _enteredOtp = _enteredOtp.substring(0, _enteredOtp.length - 1);
+        _otpTextController.text = _enteredOtp;
+        _otpTextController.selection = TextSelection.collapsed(offset: _enteredOtp.length);
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<LatLng?>(riderLiveLocationProvider, (prev, next) {
+      if (next != null && next != prev && _mapController != null) {
+        _mapController!.animateCamera(CameraUpdate.newLatLng(next));
+      }
+    });
+
+    ref.listen<RiderNavigationState>(riderNavigationProvider, (prev, next) {
+      if (next.routePoints.isNotEmpty && next.routePoints != prev?.routePoints && _mapController != null) {
+        final order = ref.read(fulfillmentProvider).activeOrder;
+        if (order != null) {
+          final riderPos = ref.read(riderLiveLocationProvider) ??
+              LatLng(order.storeLocation.latitude - 0.0015, order.storeLocation.longitude - 0.0015);
+          _fitMapToRoute(order, next.routePoints, riderPos);
+        }
+      }
+    });
+
+    ref.listen<FulfillmentState>(fulfillmentProvider, (prev, next) {
+      if (prev?.activeOrder?.currentStep != next.activeOrder?.currentStep) {
+        final newStep = next.activeOrder?.currentStep;
+        if (newStep == DeliveryFlowStep.enterStoreOtp ||
+            newStep == DeliveryFlowStep.enterCustomerOtp) {
+          _resetOtp();
+        }
+      }
+    });
+
     final fulfillment = ref.watch(fulfillmentProvider);
     final order = fulfillment.activeOrder ?? DeliveryOrder.sample();
     final step = order.currentStep;
@@ -83,9 +159,9 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     return switch (step) {
       DeliveryFlowStep.offerReceived => const SizedBox.shrink(),
       DeliveryFlowStep.headingToStore => _buildHeadingToStore(context, order),
-      DeliveryFlowStep.arrivedAtStore => _buildArrivedAtStorePrompt(context, order),
+      DeliveryFlowStep.arrivedAtStore => _buildHeadingToStore(context, order),
       DeliveryFlowStep.enterStoreOtp => _buildEnterStoreOtp(context, order),
-      DeliveryFlowStep.pickupConfirmed => _buildPickupConfirmed(context, order),
+      DeliveryFlowStep.pickupConfirmed => _buildHeadingToCustomer(context, order),
       DeliveryFlowStep.headingToCustomer => _buildHeadingToCustomer(context, order),
       DeliveryFlowStep.enterCustomerOtp => _buildEnterCustomerOtp(context, order),
       DeliveryFlowStep.deliveryCompleted => _buildDeliveryCompleted(context, order),
@@ -97,10 +173,21 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   // ============================================================
   Widget _buildHeadingToStore(BuildContext context, DeliveryOrder order) {
     final navState = ref.watch(riderNavigationProvider);
-    final riderPos = ref.watch(riderLiveLocationProvider) ?? const LatLng(22.5820, 88.3980);
+    final fulfillment = ref.watch(fulfillmentProvider);
+    final riderPos = ref.watch(riderLiveLocationProvider) ??
+        LatLng(order.storeLocation.latitude - 0.0015, order.storeLocation.longitude - 0.0015);
     final polylinePoints = navState.routePoints.isNotEmpty
         ? navState.routePoints
-        : [riderPos, order.storeLocation];
+        : TwoWheelerRouteHelper.generateTwoWheelerRoute(
+            origin: riderPos,
+            destination: order.storeLocation,
+          );
+
+    final double distToStoreMeters = TwoWheelerRouteHelper.calculateDistanceMeters(
+      riderPos,
+      order.storeLocation,
+    );
+    final bool isWithin30m = distToStoreMeters <= 30.0;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -156,12 +243,19 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               target: order.storeLocation,
               zoom: 15.0,
             ),
+            onMapCreated: (controller) {
+              _mapController = controller;
+              _fitMapToRoute(order, polylinePoints, riderPos);
+            },
             markers: {
               Marker(
                 markerId: const MarkerId('store'),
                 position: order.storeLocation,
                 icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                infoWindow: InfoWindow(title: order.storeName),
+                infoWindow: InfoWindow(
+                  title: order.storeName,
+                  snippet: order.storeAddress,
+                ),
               ),
               Marker(
                 markerId: const MarkerId('rider_bike'),
@@ -173,21 +267,18 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
             },
             polylines: {
-              Polyline(
-                polylineId: const PolylineId('toStoreRoute'),
+              TwoWheelerRouteHelper.createTwoWheelerPolyline(
+                polylineId: 'toStoreRoute',
+                points: polylinePoints,
                 color: Colors.blue.shade600,
                 width: 6,
-                startCap: Cap.roundCap,
-                endCap: Cap.roundCap,
-                jointType: JointType.round,
-                points: polylinePoints,
               ),
             },
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
           ),
 
-          // Top Turn-by-Turn Navigation HUD (Screen 5)
+          // Top Turn-by-Turn Navigation HUD (Clean, no tabs)
           Positioned(
             top: 14,
             left: 16,
@@ -195,15 +286,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             child: _buildNavigationHud(context, order, navState),
           ),
 
-          // Navigation Leg Selector
-          Positioned(
-            top: 86,
-            left: 16,
-            right: 16,
-            child: _buildLegSelectorChips(context, order, navState),
-          ),
-
-          // Bottom Store Card & Navigation Action
+          // Bottom Store Card (Clean UI: Info icon for details, No Navigate button, Arrived at Store when within 30m)
           Positioned(
             left: 20,
             right: 20,
@@ -254,6 +337,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                                 fontSize: 13,
                                 color: Color(0xFF64748B),
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -267,41 +352,84 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                           ],
                         ),
                       ),
+                      IconButton(
+                        tooltip: 'Order Details',
+                        icon: const Icon(Icons.info_outline, color: Brand.red, size: 24),
+                        onPressed: () => _showOrderDetailsModal(context, order),
+                      ),
                     ],
                   ),
-                  _buildOrderItemsSummary(order),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      IconButton.filledTonal(
-                        onPressed: () => _showManeuverStepsModal(context, navState),
-                        icon: const Icon(Icons.list_alt_rounded),
-                        tooltip: 'Turn steps',
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            ref.read(fulfillmentProvider.notifier).proceedToArrivedAtStore();
-                          },
-                          icon: const Icon(Icons.navigation, color: Colors.white, size: 18),
-                          label: const Text(
-                            'Navigate',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Brand.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                  if (isWithin30m) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: fulfillment.isLoading
+                            ? null
+                            : () async {
+                                setState(() => _enteredOtp = '');
+                                await ref.read(fulfillmentProvider.notifier).confirmArrivedAtStore(
+                                      order.orderId,
+                                      riderPos.latitude,
+                                      riderPos.longitude,
+                                    );
+                              },
+                        icon: const Icon(Icons.storefront_rounded, color: Colors.white, size: 20),
+                        label: fulfillment.isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text(
+                                'Arrived at Store',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Brand.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onDoubleTap: () {
+                        ref.read(riderLiveLocationProvider.notifier).updateLocation(
+                              order.storeLocation,
+                            );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.near_me_rounded, size: 18, color: Brand.red),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${distToStoreMeters >= 1000 ? '${(distToStoreMeters / 1000).toStringAsFixed(1)} km' : '${distToStoreMeters.round()} m'} to store • Arrived button appears within 30m',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -440,7 +568,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                   onPressed: fulfillment.isLoading
                       ? null
                       : () {
-                          setState(() => _enteredOtp = order.storeOtp);
+                          setState(() => _enteredOtp = '');
                           ref.read(fulfillmentProvider.notifier).confirmArrivedAtStore(
                                 order.orderId,
                                 order.storeLocation.latitude,
@@ -503,8 +631,9 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Column(
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
             const SizedBox(height: 20),
             const Text(
               'Enter Store OTP',
@@ -525,8 +654,44 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             ),
             const SizedBox(height: 32),
 
-            // 4 OTP Boxes
-            OtpCodeBoxes(otp: _enteredOtp, length: 4),
+            // 4 OTP Boxes with tap to focus
+            OtpCodeBoxes(
+              otp: _enteredOtp,
+              length: 4,
+              onTap: () => _otpFocusNode.requestFocus(),
+            ),
+
+            // Invisible TextField to receive software/hardware keyboard input seamlessly
+            SizedBox(
+              width: 0,
+              height: 0,
+              child: Opacity(
+                opacity: 0,
+                child: TextField(
+                  controller: _otpTextController,
+                  focusNode: _otpFocusNode,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(4),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _enteredOtp = val;
+                    });
+                  },
+                ),
+              ),
+            ),
+
+            if (_enteredOtp.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _resetOtp,
+                icon: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFF64748B)),
+                label: const Text('Clear', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+              ),
+            ],
 
             if (fulfillment.errorMessage != null) ...[
               const SizedBox(height: 12),
@@ -545,13 +710,18 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: (_enteredOtp.length == 4 && !fulfillment.isLoading)
-                      ? () {
-                          ref.read(fulfillmentProvider.notifier).verifyStoreOtp(
+                      ? () async {
+                          final success = await ref
+                              .read(fulfillmentProvider.notifier)
+                              .verifyStoreOtp(
                                 orderId: order.orderId,
                                 otp: _enteredOtp,
                                 lat: order.storeLocation.latitude,
                                 lng: order.storeLocation.longitude,
                               );
+                          if (success) {
+                            _resetOtp();
+                          }
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -578,7 +748,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
             ),
 
-            const Spacer(),
+            const SizedBox(height: 20),
 
             // Custom in-app numeric pad
             CustomNumericKeypad(
@@ -588,6 +758,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             const SizedBox(height: 12),
           ],
         ),
+      ),
       ),
     );
   }
@@ -664,14 +835,18 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    setState(() => _enteredOtp = order.customerOtp);
+                    setState(() => _enteredOtp = '');
                     ref.read(fulfillmentProvider.notifier).proceedToHeadingToCustomer();
                     final riderLoc = ref.read(riderLiveLocationProvider);
+                    final effectiveRiderLat = riderLoc?.latitude ?? (order.storeLocation.latitude - 0.0015);
+                    final effectiveRiderLng = riderLoc?.longitude ?? (order.storeLocation.longitude - 0.0015);
                     ref.read(riderNavigationProvider.notifier).changeLeg(
                           order.orderId,
                           NavigationLegEnum.delivery,
-                          riderLat: riderLoc?.latitude,
-                          riderLng: riderLoc?.longitude,
+                          riderLat: effectiveRiderLat,
+                          riderLng: effectiveRiderLng,
+                          storeLocation: order.storeLocation,
+                          customerLocation: order.customerLocation,
                         );
                   },
                   style: ElevatedButton.styleFrom(
@@ -704,14 +879,24 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   }
 
   // ============================================================
-  // 5. HEADING TO CUSTOMER (Screen 9)
+  // 5. HEADING TO CUSTOMER (Clean UI: Info icon for details, No Navigate button, Arrived at Delivery Location when within 30m)
   // ============================================================
   Widget _buildHeadingToCustomer(BuildContext context, DeliveryOrder order) {
     final navState = ref.watch(riderNavigationProvider);
+    final fulfillment = ref.watch(fulfillmentProvider);
     final riderPos = ref.watch(riderLiveLocationProvider) ?? order.storeLocation;
     final polylinePoints = navState.routePoints.isNotEmpty
         ? navState.routePoints
-        : [order.storeLocation, order.customerLocation];
+        : TwoWheelerRouteHelper.generateTwoWheelerRoute(
+            origin: riderPos,
+            destination: order.customerLocation,
+          );
+
+    final double distToCustomerMeters = TwoWheelerRouteHelper.calculateDistanceMeters(
+      riderPos,
+      order.customerLocation,
+    );
+    final bool isWithin30m = distToCustomerMeters <= 30.0;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -767,12 +952,19 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               target: order.customerLocation,
               zoom: 15.0,
             ),
+            onMapCreated: (controller) {
+              _mapController = controller;
+              _fitMapToRoute(order, polylinePoints, riderPos);
+            },
             markers: {
               Marker(
                 markerId: const MarkerId('customer'),
                 position: order.customerLocation,
                 icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                infoWindow: InfoWindow(title: order.customerName),
+                infoWindow: InfoWindow(
+                  title: order.customerName,
+                  snippet: order.customerAddress,
+                ),
               ),
               Marker(
                 markerId: const MarkerId('rider_bike'),
@@ -784,21 +976,18 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
             },
             polylines: {
-              Polyline(
-                polylineId: const PolylineId('toCustomerRoute'),
+              TwoWheelerRouteHelper.createTwoWheelerPolyline(
+                polylineId: 'toCustomerRoute',
+                points: polylinePoints,
                 color: Brand.red,
                 width: 6,
-                startCap: Cap.roundCap,
-                endCap: Cap.roundCap,
-                jointType: JointType.round,
-                points: polylinePoints,
               ),
             },
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
           ),
 
-          // Top Turn-by-Turn Navigation HUD (Screen 9)
+          // Top Turn-by-Turn Navigation HUD (Clean, no tabs)
           Positioned(
             top: 14,
             left: 16,
@@ -806,15 +995,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             child: _buildNavigationHud(context, order, navState),
           ),
 
-          // Navigation Leg Selector
-          Positioned(
-            top: 86,
-            left: 16,
-            right: 16,
-            child: _buildLegSelectorChips(context, order, navState),
-          ),
-
-          // Bottom Customer Card & Navigation Action
+          // Bottom Customer Card (Clean UI: Info icon for details, No Navigate button, Arrived at Delivery Location when within 30m)
           Positioned(
             left: 20,
             right: 20,
@@ -865,6 +1046,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                                 fontSize: 13,
                                 color: Color(0xFF64748B),
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -878,45 +1061,84 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                           ],
                         ),
                       ),
+                      IconButton(
+                        tooltip: 'Order Details',
+                        icon: const Icon(Icons.info_outline, color: Brand.red, size: 24),
+                        onPressed: () => _showOrderDetailsModal(context, order),
+                      ),
                     ],
                   ),
-                  _buildOrderItemsSummary(order),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      IconButton.filledTonal(
-                        onPressed: () => _showManeuverStepsModal(context, navState),
-                        icon: const Icon(Icons.list_alt_rounded),
-                        tooltip: 'Turn steps',
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            ref.read(fulfillmentProvider.notifier).recordArrivedAtCustomer(
-                                  order.orderId,
-                                  order.customerLocation.latitude,
-                                  order.customerLocation.longitude,
-                                );
-                          },
-                          icon: const Icon(Icons.navigation, color: Colors.white, size: 18),
-                          label: const Text(
-                            'Navigate',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Brand.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                  if (isWithin30m) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: fulfillment.isLoading
+                            ? null
+                            : () async {
+                                setState(() => _enteredOtp = '');
+                                await ref.read(fulfillmentProvider.notifier).recordArrivedAtCustomer(
+                                      order.orderId,
+                                      riderPos.latitude,
+                                      riderPos.longitude,
+                                    );
+                              },
+                        icon: const Icon(Icons.pin_drop_rounded, color: Colors.white, size: 20),
+                        label: fulfillment.isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text(
+                                'Arrived at Delivery Location',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Brand.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onDoubleTap: () {
+                        ref.read(riderLiveLocationProvider.notifier).updateLocation(
+                              order.customerLocation,
+                            );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.near_me_rounded, size: 18, color: Brand.red),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${distToCustomerMeters >= 1000 ? '${(distToCustomerMeters / 1000).toStringAsFixed(1)} km' : '${distToCustomerMeters.round()} m'} to customer • Arrived button appears within 30m',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -954,8 +1176,9 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Column(
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
             const SizedBox(height: 20),
             const Text(
               'Enter Customer OTP',
@@ -976,8 +1199,44 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             ),
             const SizedBox(height: 28),
 
-            // 4 OTP Boxes
-            OtpCodeBoxes(otp: _enteredOtp, length: 4),
+            // 4 OTP Boxes with tap to focus
+            OtpCodeBoxes(
+              otp: _enteredOtp,
+              length: 4,
+              onTap: () => _otpFocusNode.requestFocus(),
+            ),
+
+            // Invisible TextField to receive software/hardware keyboard input seamlessly
+            SizedBox(
+              width: 0,
+              height: 0,
+              child: Opacity(
+                opacity: 0,
+                child: TextField(
+                  controller: _otpTextController,
+                  focusNode: _otpFocusNode,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(4),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _enteredOtp = val;
+                    });
+                  },
+                ),
+              ),
+            ),
+
+            if (_enteredOtp.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _resetOtp,
+                icon: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFF64748B)),
+                label: const Text('Clear', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+              ),
+            ],
 
             if (fulfillment.errorMessage != null) ...[
               const SizedBox(height: 10),
@@ -1024,12 +1283,25 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: (_enteredOtp.length == 4 && _isAgeVerified && !fulfillment.isLoading)
-                      ? () {
-                          ref.read(fulfillmentProvider.notifier).completeCustomerDelivery(
+                      ? () async {
+                          final success = await ref
+                              .read(fulfillmentProvider.notifier)
+                              .completeCustomerDelivery(
                                 orderId: order.orderId,
                                 otp: _enteredOtp,
                                 isAgeVerified: _isAgeVerified,
                               );
+                          if (success && context.mounted) {
+                            _resetOtp();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Delivery completed successfully!'),
+                                backgroundColor: Brand.green,
+                              ),
+                            );
+                            ref.read(fulfillmentProvider.notifier).finishAndClearOrder();
+                            Navigator.of(context).popUntil((route) => route.isFirst);
+                          }
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -1056,7 +1328,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
             ),
 
-            const Spacer(),
+            const SizedBox(height: 20),
 
             // Custom in-app numeric pad
             CustomNumericKeypad(
@@ -1066,6 +1338,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             const SizedBox(height: 12),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1404,17 +1677,418 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
               onSelected: (_) {
                 final riderLoc = ref.read(riderLiveLocationProvider);
+                final effectiveRiderLat = riderLoc?.latitude ?? (order.storeLocation.latitude - 0.0015);
+                final effectiveRiderLng = riderLoc?.longitude ?? (order.storeLocation.longitude - 0.0015);
                 ref.read(riderNavigationProvider.notifier).changeLeg(
                       order.orderId,
                       leg,
-                      riderLat: riderLoc?.latitude,
-                      riderLng: riderLoc?.longitude,
+                      riderLat: effectiveRiderLat,
+                      riderLng: effectiveRiderLng,
+                      storeLocation: order.storeLocation,
+                      customerLocation: order.customerLocation,
                     );
               },
             ),
           );
         }).toList(),
       ),
+    );
+  }
+
+  void _showOrderDetailsModal(BuildContext context, DeliveryOrder order) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Material(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Order Details',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        Text(
+                          order.orderNumber,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Earnings Summary Banner
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Expected Payout',
+                                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    order.formattedTotalEarnings,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Brand.red,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      'Trip: ${order.formattedEarnings}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blue.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                  if (order.incentivePaisa > 0) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade50,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        'Tip: ${order.formattedIncentive}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.green.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Store Section
+                        const Text(
+                          'Store Information',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(Icons.storefront, color: Colors.blue.shade700, size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      order.storeName,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      order.storeAddress,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                    if (order.activeDeliveryDetail?.store.phone?.isNotEmpty == true) ...[
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.phone, size: 14, color: Color(0xFF64748B)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            order.activeDeliveryDetail!.store.phone!,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                              color: Color(0xFF334155),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Customer Section
+                        const Text(
+                          'Delivery Information',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Brand.redLight,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.location_on, color: Brand.red, size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      order.customerName,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      order.customerAddress,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                    if (order.customerPhone.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.phone, size: 14, color: Color(0xFF64748B)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            order.customerPhone,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                              color: Color(0xFF334155),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Package Items Section
+                        Text(
+                          'Package Items (${order.totalItems} items • ${order.totalVolumeMl} ml)',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (order.items.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.inventory_2_outlined, size: 20, color: Color(0xFF64748B)),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Standard Parcel (${order.totalItems} item)',
+                                    style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: order.items.length,
+                              separatorBuilder: (context, index) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final item = order.items[index];
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 32,
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            '${item.quantity}x',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: Brand.red,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item.productName,
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF1E293B),
+                                              ),
+                                            ),
+                                            if (item.packageSize != null && item.packageSize!.isNotEmpty)
+                                              Text(
+                                                'Size: ${item.packageSize}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: Color(0xFF64748B),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

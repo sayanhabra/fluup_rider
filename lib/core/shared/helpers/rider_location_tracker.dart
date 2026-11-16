@@ -133,6 +133,9 @@ class RiderLocationTracker {
       debugPrint(
         '📍 [RiderLocationTracker] Synced location: (${pos.latitude}, ${pos.longitude}), battery: $batteryLevel%',
       );
+
+      // Periodically sync single source of truth active ride state (IDLE, ACTIVE_OFFER, ACTIVE_DELIVERY)
+      await _ref.read(fulfillmentProvider.notifier).checkAndSyncActiveState();
     } catch (e) {
       debugPrint('⚠️ [RiderLocationTracker] Error updating location telemetry: $e');
     }

@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+double parseCoordinate(dynamic val) {
+  if (val == null) return 0.0;
+  if (val is num) return val.toDouble();
+  if (val is String) return double.tryParse(val) ?? 0.0;
+  return 0.0;
+}
+
 enum NavigationLegEnum {
   pickup('pickup', 'To Store (Pickup)', Icons.storefront_rounded),
   delivery('delivery', 'To Customer (Delivery)', Icons.person_pin_circle_rounded),
@@ -41,8 +48,8 @@ class MapCoordinates {
 
   factory MapCoordinates.fromJson(Map<String, dynamic> json) {
     return MapCoordinates(
-      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
-      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      latitude: parseCoordinate(json['latitude'] ?? json['lat']),
+      longitude: parseCoordinate(json['longitude'] ?? json['lng']),
       title: json['title']?.toString(),
       address: json['address']?.toString(),
     );
@@ -162,6 +169,19 @@ class RouteDetails {
   factory RouteDetails.fromJson(Map<String, dynamic> json) {
     final encoded = json['encodedPolyline']?.toString() ?? '';
     final rawSteps = json['steps'] as List<dynamic>? ?? [];
+    final rawPoints = json['points'] as List<dynamic>? ?? [];
+
+    List<LatLng> decodedPoints = PolylineDecoder.decodePolyline(encoded);
+    if (decodedPoints.isEmpty && rawPoints.isNotEmpty) {
+      decodedPoints = rawPoints.map((p) {
+        if (p is Map) {
+          final lat = parseCoordinate(p['latitude'] ?? p['lat']);
+          final lng = parseCoordinate(p['longitude'] ?? p['lng']);
+          return LatLng(lat, lng);
+        }
+        return const LatLng(0, 0);
+      }).where((p) => p.latitude != 0 || p.longitude != 0).toList();
+    }
 
     return RouteDetails(
       encodedPolyline: encoded,
@@ -188,7 +208,37 @@ class RouteDetails {
               s is Map ? Map<String, dynamic>.from(s) : {}))
           .toList(),
       provider: json['provider']?.toString() ?? 'google_routes',
-      points: PolylineDecoder.decodePolyline(encoded),
+      points: decodedPoints,
+    );
+  }
+
+  RouteDetails copyWith({
+    String? encodedPolyline,
+    int? distanceMeters,
+    double? distanceKm,
+    int? durationSeconds,
+    int? durationMinutes,
+    int? durationInTrafficSeconds,
+    int? durationInTrafficMinutes,
+    MapCoordinates? origin,
+    MapCoordinates? destination,
+    List<RouteStep>? steps,
+    String? provider,
+    List<LatLng>? points,
+  }) {
+    return RouteDetails(
+      encodedPolyline: encodedPolyline ?? this.encodedPolyline,
+      distanceMeters: distanceMeters ?? this.distanceMeters,
+      distanceKm: distanceKm ?? this.distanceKm,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
+      durationInTrafficSeconds: durationInTrafficSeconds ?? this.durationInTrafficSeconds,
+      durationInTrafficMinutes: durationInTrafficMinutes ?? this.durationInTrafficMinutes,
+      origin: origin ?? this.origin,
+      destination: destination ?? this.destination,
+      steps: steps ?? this.steps,
+      provider: provider ?? this.provider,
+      points: points ?? this.points,
     );
   }
 
@@ -228,8 +278,8 @@ class NavigationWaypoint {
     return NavigationWaypoint(
       type: json['type']?.toString() ?? 'STORE',
       name: json['name']?.toString() ?? '',
-      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
-      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      latitude: parseCoordinate(json['latitude'] ?? json['lat']),
+      longitude: parseCoordinate(json['longitude'] ?? json['lng']),
       isCompleted: json['isCompleted'] as bool? ?? false,
     );
   }
@@ -278,6 +328,24 @@ class RiderNavigationResponse {
           .map((w) => NavigationWaypoint.fromJson(
               w is Map ? Map<String, dynamic>.from(w) : {}))
           .toList(),
+    );
+  }
+
+  RiderNavigationResponse copyWith({
+    int? orderId,
+    String? orderNumber,
+    NavigationLegEnum? activeLeg,
+    RouteDetails? route,
+    String? routeWarning,
+    List<NavigationWaypoint>? waypoints,
+  }) {
+    return RiderNavigationResponse(
+      orderId: orderId ?? this.orderId,
+      orderNumber: orderNumber ?? this.orderNumber,
+      activeLeg: activeLeg ?? this.activeLeg,
+      route: route ?? this.route,
+      routeWarning: routeWarning ?? this.routeWarning,
+      waypoints: waypoints ?? this.waypoints,
     );
   }
 

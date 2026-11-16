@@ -17,6 +17,12 @@ enum RiderStateType {
   }
 }
 
+double parseCoordinate(dynamic val) {
+  if (val == null) return 0.0;
+  if (val is num) return val.toDouble();
+  return double.tryParse(val.toString().trim()) ?? 0.0;
+}
+
 class RiderOfferPreview {
   final int orderId;
   final String orderNumber;
@@ -65,8 +71,12 @@ class RiderOfferPreview {
       attemptId: (json['attemptId'] as num?)?.toInt() ?? 0,
       storeName: json['storeName']?.toString() ?? '',
       storeAddress: json['storeAddress']?.toString() ?? '',
-      storeLatitude: (json['storeLatitude'] as num?)?.toDouble() ?? 0.0,
-      storeLongitude: (json['storeLongitude'] as num?)?.toDouble() ?? 0.0,
+      storeLatitude: parseCoordinate(
+        json['storeLatitude'] ?? json['store_latitude'] ?? json['latitude'] ?? json['lat'],
+      ),
+      storeLongitude: parseCoordinate(
+        json['storeLongitude'] ?? json['store_longitude'] ?? json['longitude'] ?? json['lng'],
+      ),
       deliveryArea: json['deliveryArea']?.toString() ?? '',
       distanceKm: (json['distanceKm'] as num?)?.toDouble(),
       totalItems: (json['totalItems'] as num?)?.toInt() ?? 0,
@@ -119,8 +129,12 @@ class ActiveDeliveryStore {
       licenseNumber: json['licenseNumber']?.toString() ?? '',
       address: json['address']?.toString() ?? '',
       phone: json['phone']?.toString(),
-      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
-      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      latitude: parseCoordinate(
+        json['latitude'] ?? json['lat'] ?? json['storeLatitude'],
+      ),
+      longitude: parseCoordinate(
+        json['longitude'] ?? json['lng'] ?? json['storeLongitude'],
+      ),
     );
   }
 
@@ -155,10 +169,14 @@ class ActiveDeliveryCustomer {
     return ActiveDeliveryCustomer(
       name: json['name']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
-      deliveryAddress: json['deliveryAddress']?.toString() ?? '',
+      deliveryAddress: json['deliveryAddress']?.toString() ?? json['address']?.toString() ?? '',
       pincode: json['pincode']?.toString() ?? '',
-      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
-      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      latitude: parseCoordinate(
+        json['latitude'] ?? json['lat'] ?? json['deliveryLatitude'],
+      ),
+      longitude: parseCoordinate(
+        json['longitude'] ?? json['lng'] ?? json['deliveryLongitude'],
+      ),
     );
   }
 
@@ -369,7 +387,10 @@ class RiderActiveStateResponse {
   bool get hasActiveDelivery =>
       stateType == RiderStateType.activeDelivery && activeDelivery != null;
 
-  factory RiderActiveStateResponse.fromJson(Map<String, dynamic> json) {
+  factory RiderActiveStateResponse.fromJson(Map<String, dynamic> rawJson) {
+    final json = (rawJson['response'] is Map)
+        ? Map<String, dynamic>.from(rawJson['response'] as Map)
+        : rawJson;
     final rawType = json['stateType']?.toString();
     final type = RiderStateType.fromString(rawType);
 

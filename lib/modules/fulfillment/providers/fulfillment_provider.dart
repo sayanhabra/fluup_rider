@@ -3,7 +3,9 @@ import 'package:adm_rider/core/api/api_service.dart';
 import 'package:adm_rider/core/shared/helpers/rider_location_tracker.dart';
 import 'package:adm_rider/modules/fulfillment/models/delivery_order.dart';
 import 'package:adm_rider/modules/fulfillment/models/rider_active_state_model.dart';
+import 'package:adm_rider/modules/fulfillment/models/rider_navigation_model.dart';
 import 'package:adm_rider/modules/fulfillment/models/trip_model.dart';
+import 'package:adm_rider/modules/fulfillment/providers/rider_navigation_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -347,12 +349,24 @@ class FulfillmentNotifier extends Notifier<FulfillmentState> {
     }
 
     if (isSuccess) {
+      final updatedOrder = state.activeOrder?.copyWith(
+        currentStep: DeliveryFlowStep.headingToCustomer,
+      );
       state = state.copyWith(
         isLoading: false,
-        activeOrder: state.activeOrder?.copyWith(
-          currentStep: DeliveryFlowStep.pickupConfirmed,
-        ),
+        activeOrder: updatedOrder,
       );
+      if (updatedOrder != null) {
+        final riderLoc = ref.read(riderLiveLocationProvider);
+        ref.read(riderNavigationProvider.notifier).fetchNavigation(
+              orderId,
+              leg: NavigationLegEnum.delivery,
+              riderLat: riderLoc?.latitude ?? lat,
+              riderLng: riderLoc?.longitude ?? lng,
+              storeLocation: updatedOrder.storeLocation,
+              customerLocation: updatedOrder.customerLocation,
+            );
+      }
       return true;
     }
     return false;
@@ -377,6 +391,7 @@ class FulfillmentNotifier extends Notifier<FulfillmentState> {
   }
 
   Future<void> recordArrivedAtCustomer(int orderId, double lat, double lng) async {
+    state = state.copyWith(isLoading: true);
     try {
       await _apiService.arriveAtCustomer(
         orderId: orderId,
@@ -386,7 +401,12 @@ class FulfillmentNotifier extends Notifier<FulfillmentState> {
     } catch (e) {
       debugPrint('Error recording arrival at customer: $e');
     }
-    proceedToEnterCustomerOtp();
+    state = state.copyWith(
+      isLoading: false,
+      activeOrder: state.activeOrder?.copyWith(
+        currentStep: DeliveryFlowStep.enterCustomerOtp,
+      ),
+    );
   }
 
   Future<bool> completeCustomerDelivery({

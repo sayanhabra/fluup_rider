@@ -11,7 +11,15 @@ class GoogleMapHelper {
 
   static final GoogleMapHelper instance = GoogleMapHelper._();
 
-  final geo.Geocoding _geocoding = geo.Geocoding();
+  geo.Geocoding? _geocodingInstance;
+  geo.Geocoding? get _geocoding {
+    if (_geocodingInstance == null) {
+      try {
+        _geocodingInstance = geo.Geocoding();
+      } catch (_) {}
+    }
+    return _geocodingInstance;
+  }
 
   GoogleMapController? _mapController;
 
@@ -291,7 +299,8 @@ class GoogleMapHelper {
 
   Future<String?> getAddressFromLatLng(LatLng position) async {
     try {
-      final List<geo.Placemark> placemarks = await _geocoding
+      if (_geocoding == null) return null;
+      final List<geo.Placemark> placemarks = await _geocoding!
           .placemarkFromCoordinates(position.latitude, position.longitude);
 
       if (placemarks.isEmpty) return null;
@@ -325,7 +334,8 @@ class GoogleMapHelper {
 
   Future<LatLng?> getLatLngFromAddress(String address) async {
     try {
-      final List<geo.Location> locations = await _geocoding.locationFromAddress(
+      if (_geocoding == null) return null;
+      final List<geo.Location> locations = await _geocoding!.locationFromAddress(
         address,
       );
 

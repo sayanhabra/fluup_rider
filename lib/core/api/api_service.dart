@@ -8,6 +8,7 @@ import 'package:adm_rider/modules/auth/models/verify_otp_request.dart';
 import 'package:adm_rider/modules/auth/models/verify_otp_response.dart';
 import 'package:adm_rider/modules/notifications/models/notification_models.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api_client.dart';
@@ -104,7 +105,8 @@ class ApiService {
     final formData = FormData.fromMap(formDataMap);
 
     return _handler.post(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.strubmitVerification}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.strubmitVerification}',
       data: formData,
       contentType: RequestContentType.multipart,
       fromJson: (json) => SetProfileSubmitResponse.fromJson(json),
@@ -165,7 +167,9 @@ class ApiService {
   }
 
   /// PATCH /rider/auth/profile
-  Future<BaseResponseModel> updateRiderProfile(Map<String, dynamic> data) async {
+  Future<BaseResponseModel> updateRiderProfile(
+    Map<String, dynamic> data,
+  ) async {
     return _handler.patch(
       endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.updateProfile}',
       data: data,
@@ -204,7 +208,8 @@ class ApiService {
     int? batteryLevel,
   }) async {
     return _handler.patch(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.riderAvailabilityStatus}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.riderAvailabilityStatus}',
       data: {
         'status': status,
         if (latitude != null) 'latitude': latitude,
@@ -222,7 +227,8 @@ class ApiService {
   /// Single source of truth for the rider app.
   Future<BaseResponseModel> getActiveOrderFulfillment() async {
     return _handler.get(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.activeOrderFulfillment}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.activeOrderFulfillment}',
       fromJson: (json) => BaseResponseModel.fromJson(json),
       errorMessage: 'Failed to retrieve active order fulfillment state',
     );
@@ -231,7 +237,7 @@ class ApiService {
   /// GET /rider/order-fulfillment/{orderId}/navigation
   /// Computes Routes API two-wheeler route polylines, ETAs, and turn-by-turn maneuvers
   /// for Rider -> Store (pickup), Rider/Store -> Customer (delivery), or Customer -> Store (return).
-  Future<BaseResponseModel> getOrderNavigation(
+  Future<BaseResponseModel?> getOrderNavigation(
     int orderId, {
     String? leg,
     double? riderLat,
@@ -243,12 +249,20 @@ class ApiService {
       if (riderLng != null) 'riderLng': riderLng,
     };
 
-    return _handler.get(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.orderNavigation(orderId)}',
-      queryParameters: queryParams.isNotEmpty ? queryParams : null,
-      fromJson: (json) => BaseResponseModel.fromJson(json),
-      errorMessage: 'Failed to retrieve navigation route',
-    );
+    try {
+      return await _handler.get(
+        endpoint:
+            '${ApiEndpoints.baseUrlRider}${ApiEndpoints.orderNavigation(orderId)}',
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+        fromJson: (json) => BaseResponseModel.fromJson(json),
+        errorMessage: 'Failed to retrieve navigation route',
+      );
+    } catch (e) {
+      debugPrint(
+        'ℹ️ [Navigation API] Route computation unavailable: $e. Utilizing local two-wheeler navigation fallback.',
+      );
+      return null;
+    }
   }
 
   /// POST /rider/order-fulfillment/{orderId}/respond
@@ -258,7 +272,8 @@ class ApiService {
     String? rejectionReason,
   }) async {
     return _handler.post(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.respondOffer(orderId)}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.respondOffer(orderId)}',
       data: {
         'response': response,
         if (rejectionReason != null) 'rejectionReason': rejectionReason,
@@ -276,11 +291,9 @@ class ApiService {
     required double longitude,
   }) async {
     return _handler.post(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.arriveAtStore(orderId)}',
-      data: {
-        'latitude': latitude,
-        'longitude': longitude,
-      },
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.arriveAtStore(orderId)}',
+      data: {'latitude': latitude, 'longitude': longitude},
       contentType: RequestContentType.json,
       fromJson: (json) => BaseResponseModel.fromJson(json),
       errorMessage: 'Failed to record arrival at store',
@@ -295,12 +308,9 @@ class ApiService {
     required double longitude,
   }) async {
     return _handler.post(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.verifyPickup(orderId)}',
-      data: {
-        'otp': otp,
-        'latitude': latitude,
-        'longitude': longitude,
-      },
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.verifyPickup(orderId)}',
+      data: {'otp': otp, 'latitude': latitude, 'longitude': longitude},
       contentType: RequestContentType.json,
       fromJson: (json) => BaseResponseModel.fromJson(json),
       errorMessage: 'Failed to verify store pickup OTP',
@@ -314,11 +324,9 @@ class ApiService {
     required double longitude,
   }) async {
     return _handler.post(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.arriveAtCustomer(orderId)}',
-      data: {
-        'latitude': latitude,
-        'longitude': longitude,
-      },
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.arriveAtCustomer(orderId)}',
+      data: {'latitude': latitude, 'longitude': longitude},
       contentType: RequestContentType.json,
       fromJson: (json) => BaseResponseModel.fromJson(json),
       errorMessage: 'Failed to record arrival at customer',
@@ -334,12 +342,14 @@ class ApiService {
     String? verifiedDocumentType,
   }) async {
     return _handler.post(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.completeDelivery(orderId)}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.completeDelivery(orderId)}',
       data: {
         'deliveryOtp': deliveryOtp,
         'isAgeVerified': isAgeVerified,
         'verificationMethod': verificationMethod,
-        if (verifiedDocumentType != null) 'verifiedDocumentType': verifiedDocumentType,
+        if (verifiedDocumentType != null)
+          'verifiedDocumentType': verifiedDocumentType,
       },
       contentType: RequestContentType.json,
       fromJson: (json) => BaseResponseModel.fromJson(json),
@@ -355,7 +365,8 @@ class ApiService {
     String? notes,
   }) async {
     return _handler.post(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.failDelivery(orderId)}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.failDelivery(orderId)}',
       data: {
         'reason': reason,
         'failureType': failureType,
@@ -370,7 +381,8 @@ class ApiService {
   /// POST /rider/order-fulfillment/{orderId}/return-to-store
   Future<BaseResponseModel> returnToStore(int orderId) async {
     return _handler.post(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.returnToStore(orderId)}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.returnToStore(orderId)}',
       data: {},
       contentType: RequestContentType.json,
       fromJson: (json) => BaseResponseModel.fromJson(json),
@@ -398,7 +410,8 @@ class ApiService {
     String? endDate,
   }) async {
     return _handler.get(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.walletTransactions}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.walletTransactions}',
       queryParameters: {
         'page': page,
         'limit': limit,
@@ -462,7 +475,8 @@ class ApiService {
     String? upiId,
   }) async {
     return _handler.patch(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.walletPayoutAccount}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.walletPayoutAccount}',
       data: {
         if (bankAccountNumber != null) 'bankAccountNumber': bankAccountNumber,
         if (ifscCode != null) 'ifscCode': ifscCode,
@@ -482,7 +496,8 @@ class ApiService {
     String? status,
   }) async {
     return _handler.get(
-      endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.walletSettlementHolds}',
+      endpoint:
+          '${ApiEndpoints.baseUrlRider}${ApiEndpoints.walletSettlementHolds}',
       queryParameters: {
         'page': page,
         'limit': limit,

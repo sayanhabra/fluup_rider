@@ -1,8 +1,13 @@
 import 'dart:async';
 import 'package:adm_rider/core/config/brand.dart';
 import 'package:adm_rider/core/shared/helpers/notification_sound_helper.dart';
+import 'package:adm_rider/core/shared/helpers/rider_location_tracker.dart';
+import 'package:adm_rider/core/shared/helpers/two_wheeler_marker_helper.dart';
+import 'package:adm_rider/core/shared/helpers/two_wheeler_route_helper.dart';
 import 'package:adm_rider/modules/fulfillment/models/delivery_order.dart';
+import 'package:adm_rider/modules/fulfillment/models/rider_navigation_model.dart';
 import 'package:adm_rider/modules/fulfillment/providers/fulfillment_provider.dart';
+import 'package:adm_rider/modules/fulfillment/providers/rider_navigation_provider.dart';
 import 'package:adm_rider/modules/fulfillment/screens/active_delivery_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,11 +32,40 @@ class NewOrderRequestModal extends ConsumerStatefulWidget {
 class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
   Timer? _countdownTimer;
   int _secondsRemaining = 45;
+  BitmapDescriptor? _twoWheelerIcon;
+  GoogleMapController? _mapController;
 
   @override
   void initState() {
     super.initState();
     _startCountdown();
+    _initTwoWheelerIcon();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchOfferNavigation();
+    });
+  }
+
+  Future<void> _initTwoWheelerIcon() async {
+    try {
+      final icon = await TwoWheelerMarkerHelper.instance.getTwoWheelerMarker();
+      if (mounted) {
+        setState(() {
+          _twoWheelerIcon = icon;
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _fetchOfferNavigation() {
+    final riderPos = ref.read(riderLiveLocationProvider);
+    ref.read(riderNavigationProvider.notifier).fetchNavigation(
+          widget.order.orderId,
+          leg: NavigationLegEnum.full,
+          riderLat: riderPos?.latitude,
+          riderLng: riderPos?.longitude,
+          storeLocation: widget.order.storeLocation,
+          customerLocation: widget.order.customerLocation,
+        );
   }
 
   void _startCountdown() {
@@ -95,8 +129,16 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
     }
   }
 
-  Set<Marker> _buildMarkers() {
+  Set<Marker> _buildMarkers(LatLng riderPos) {
     return {
+      Marker(
+        markerId: const MarkerId('rider_bike'),
+        position: riderPos,
+        icon: _twoWheelerIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        anchor: const Offset(0.5, 0.5),
+        infoWindow: const InfoWindow(title: 'You (Rider)'),
+      ),
       Marker(
         markerId: const MarkerId('store'),
         position: widget.order.storeLocation,
@@ -113,21 +155,26 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
           title: 'Delivery Location',
           snippet: '${widget.order.customerDistanceText} (${widget.order.customerTimeText})',
         ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ),
     };
   }
 
-  Set<Polyline> _buildPolylines() {
+  Set<Polyline> _buildPolylines(LatLng riderPos, List<LatLng> navRoutePoints) {
+    final points = navRoutePoints.isNotEmpty
+        ? navRoutePoints
+        : TwoWheelerRouteHelper.generateTwoWheelerRoute(
+            origin: riderPos,
+            waypoints: [widget.order.storeLocation],
+            destination: widget.order.customerLocation,
+          );
+
     return {
-      Polyline(
-        polylineId: const PolylineId('route'),
+      TwoWheelerRouteHelper.createTwoWheelerPolyline(
+        polylineId: 'offerTwoWheelerRoute',
+        points: points,
         color: Brand.red,
-        width: 4,
-        points: [
-          widget.order.storeLocation,
-          widget.order.customerLocation,
-        ],
+        width: 5,
       ),
     };
   }
@@ -135,7 +182,15 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
+    // ignore: unused_local_variable
     final fulfillment = ref.watch(fulfillmentProvider);
+    final navState = ref.watch(riderNavigationProvider);
+    final liveLocation = ref.watch(riderLiveLocationProvider);
+    final riderPos = liveLocation ??
+        LatLng(
+          order.storeLocation.latitude - 0.012,
+          order.storeLocation.longitude - 0.008,
+        );
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -191,25 +246,24 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
                 children: [
                   GoogleMap(
                     initialCameraPosition: CameraPosition(
-                      target: LatLng(
-                        (order.storeLocation.latitude + order.customerLocation.latitude) / 2,
-                        (order.storeLocation.longitude + order.customerLocation.longitude) / 2,
-                      ),
+                      target: order.storeLocation,
                       zoom: 13.0,
                     ),
                     onMapCreated: (controller) {
-                      controller.animateCamera(
-                        CameraUpdate.newLatLngZoom(
-                          LatLng(
-                            (order.storeLocation.latitude + order.customerLocation.latitude) / 2,
-                            (order.storeLocation.longitude + order.customerLocation.longitude) / 2,
-                          ),
-                          13.0,
-                        ),
-                      );
+                      _mapController = controller;
+                      final bounds = TwoWheelerRouteHelper.calculateBounds([
+                        riderPos,
+                        order.storeLocation,
+                        order.customerLocation,
+                      ]);
+                      if (bounds != null) {
+                        controller.animateCamera(
+                          CameraUpdate.newLatLngBounds(bounds, 50),
+                        );
+                      }
                     },
-                    markers: _buildMarkers(),
-                    polylines: _buildPolylines(),
+                    markers: _buildMarkers(riderPos),
+                    polylines: _buildPolylines(riderPos, navState.routePoints),
                     zoomControlsEnabled: false,
                     myLocationButtonEnabled: false,
                   ),

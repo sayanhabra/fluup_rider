@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:adm_rider/modules/fulfillment/models/rider_active_state_model.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -186,6 +187,18 @@ class DeliveryOrder {
     final double custLat = detail.customer.latitude != 0.0 ? detail.customer.latitude : 22.5726;
     final double custLng = detail.customer.longitude != 0.0 ? detail.customer.longitude : 88.4337;
 
+    // Dynamically compute realistic road distance and travel time from coordinates
+    final double dLat = (custLat - storeLat) * (math.pi / 180.0);
+    final double dLng = (custLng - storeLng) * (math.pi / 180.0);
+    final double a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(storeLat * (math.pi / 180.0)) *
+            math.cos(custLat * (math.pi / 180.0)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    final double straightDistKm = 6371.0 * (2 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a)));
+    final double roadDistKm = (straightDistKm * 1.25).clamp(0.5, 50.0);
+    final int estMinutes = ((roadDistKm / 22.0) * 60).round().clamp(3, 90);
+
     return DeliveryOrder(
       orderId: detail.orderId,
       orderNumber: detail.orderNumber.startsWith('#')
@@ -194,18 +207,18 @@ class DeliveryOrder {
       storeName: detail.store.name,
       storeAddress: detail.store.address,
       storeLocation: LatLng(storeLat, storeLng),
-      storeDistanceText: '2.5 km',
-      storeTimeText: '8 min',
+      storeDistanceText: '${(roadDistKm * 0.4).clamp(0.4, 15.0).toStringAsFixed(1)} km',
+      storeTimeText: '${((roadDistKm * 0.4 / 22.0) * 60).round().clamp(2, 45)} min',
       customerName: detail.customer.name,
       customerPhone: detail.customer.phone,
       customerAddress: detail.customer.pincode.isNotEmpty
           ? '${detail.customer.deliveryAddress}, ${detail.customer.pincode}'
           : detail.customer.deliveryAddress,
       customerLocation: LatLng(custLat, custLng),
-      customerDistanceText: '3.8 km',
-      customerTimeText: '11 min',
-      totalDistanceKm: 6.3,
-      estimatedMinutes: 19,
+      customerDistanceText: '${roadDistKm.toStringAsFixed(1)} km',
+      customerTimeText: '$estMinutes min',
+      totalDistanceKm: double.parse(roadDistKm.toStringAsFixed(1)),
+      estimatedMinutes: estMinutes,
       orderValuePaisa: 0,
       earningsPaisa: detail.deliveryFeePaisa,
       incentivePaisa: detail.tipAmountPaisa,
