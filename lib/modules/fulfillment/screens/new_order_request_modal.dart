@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:adm_rider/core/config/brand.dart';
 import 'package:adm_rider/core/shared/helpers/notification_sound_helper.dart';
+import 'package:adm_rider/core/shared/helpers/location_helper.dart';
 import 'package:adm_rider/core/shared/helpers/rider_location_tracker.dart';
 import 'package:adm_rider/core/shared/helpers/two_wheeler_marker_helper.dart';
 import 'package:adm_rider/core/shared/helpers/two_wheeler_route_helper.dart';
@@ -34,12 +35,14 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
   int _secondsRemaining = 45;
   BitmapDescriptor? _twoWheelerIcon;
   GoogleMapController? _mapController;
+  LatLng? _riderLocation;
 
   @override
   void initState() {
     super.initState();
     _startCountdown();
     _initTwoWheelerIcon();
+    _riderLocation = ref.read(riderLiveLocationProvider);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fetchOfferNavigation();
     });
@@ -56,13 +59,30 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
     } catch (_) {}
   }
 
-  void _fetchOfferNavigation() {
-    final riderPos = ref.read(riderLiveLocationProvider);
+  Future<void> _fetchOfferNavigation() async {
+    ref.read(riderNavigationProvider.notifier).clear();
+    var riderPos = ref.read(riderLiveLocationProvider);
+    if (riderPos == null) {
+      final result = await LocationHelper.instance.getLocationWithFallback();
+      if (result.isSuccess && result.position != null) {
+        riderPos = LatLng(result.position!.latitude, result.position!.longitude);
+        ref.read(riderLiveLocationProvider.notifier).updateLocation(riderPos);
+      }
+    }
+    if (!mounted) return;
+    setState(() => _riderLocation = riderPos);
+
+    final effectiveRider = riderPos ??
+        LatLng(
+          widget.order.storeLocation.latitude - 0.012,
+          widget.order.storeLocation.longitude - 0.008,
+        );
+
     ref.read(riderNavigationProvider.notifier).fetchNavigation(
           widget.order.orderId,
           leg: NavigationLegEnum.full,
-          riderLat: riderPos?.latitude,
-          riderLng: riderPos?.longitude,
+          riderLat: effectiveRider.latitude,
+          riderLng: effectiveRider.longitude,
           storeLocation: widget.order.storeLocation,
           customerLocation: widget.order.customerLocation,
         );
@@ -129,9 +149,9 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
     }
   }
 
-  Set<Marker> _buildMarkers(LatLng riderPos) {
-    return {
-      Marker(
+  Set<Marker> _buildMarkers(LatLng? riderPos) {
+    final markers = <Marker>{
+      if (riderPos != null) Marker(
         markerId: const MarkerId('rider_bike'),
         position: riderPos,
         icon: _twoWheelerIcon ??
@@ -158,13 +178,20 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ),
     };
+    return markers;
   }
 
-  Set<Polyline> _buildPolylines(LatLng riderPos, List<LatLng> navRoutePoints) {
-    final points = navRoutePoints.isNotEmpty
-        ? navRoutePoints
+  Set<Polyline> _buildPolylines(LatLng? riderPos, RiderNavigationState navState) {
+    final effectiveRider = riderPos ??
+        LatLng(
+          widget.order.storeLocation.latitude - 0.012,
+          widget.order.storeLocation.longitude - 0.008,
+        );
+
+    final points = navState.routePoints.isNotEmpty
+        ? navState.routePoints
         : TwoWheelerRouteHelper.generateTwoWheelerRoute(
-            origin: riderPos,
+            origin: effectiveRider,
             waypoints: [widget.order.storeLocation],
             destination: widget.order.customerLocation,
           );
@@ -186,11 +213,7 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
     final fulfillment = ref.watch(fulfillmentProvider);
     final navState = ref.watch(riderNavigationProvider);
     final liveLocation = ref.watch(riderLiveLocationProvider);
-    final riderPos = liveLocation ??
-        LatLng(
-          order.storeLocation.latitude - 0.012,
-          order.storeLocation.longitude - 0.008,
-        );
+    final riderPos = liveLocation ?? _riderLocation;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -252,7 +275,7 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
                     onMapCreated: (controller) {
                       _mapController = controller;
                       final bounds = TwoWheelerRouteHelper.calculateBounds([
-                        riderPos,
+                        if (riderPos != null) riderPos,
                         order.storeLocation,
                         order.customerLocation,
                       ]);
@@ -263,7 +286,7 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
                       }
                     },
                     markers: _buildMarkers(riderPos),
-                    polylines: _buildPolylines(riderPos, navState.routePoints),
+                    polylines: _buildPolylines(riderPos, navState),
                     zoomControlsEnabled: false,
                     myLocationButtonEnabled: false,
                   ),

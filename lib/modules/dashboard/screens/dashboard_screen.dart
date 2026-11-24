@@ -10,7 +10,6 @@ import 'package:adm_rider/modules/auth/providers/auth_provider.dart';
 import 'package:adm_rider/modules/dashboard/widgets/dashboard_loading_screen.dart';
 import 'package:adm_rider/modules/earnings/providers/earnings_provider.dart';
 import 'package:adm_rider/modules/fulfillment/models/delivery_order.dart';
-import 'package:adm_rider/modules/fulfillment/models/rider_active_state_model.dart';
 import 'package:adm_rider/modules/fulfillment/models/rider_navigation_model.dart';
 import 'package:adm_rider/modules/fulfillment/providers/fulfillment_provider.dart';
 import 'package:adm_rider/modules/fulfillment/providers/rider_navigation_provider.dart';
@@ -116,6 +115,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           _currentLocation = location;
           _isLocationReady = true;
         });
+        ref.read(riderLiveLocationProvider.notifier).updateLocation(location);
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -355,12 +355,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       if (nextOrder != null &&
           (nextOrder.orderId != prevOrder?.orderId ||
               nextOrder.currentStep != prevOrder?.currentStep)) {
+        final isOffer = nextOrder.currentStep == DeliveryFlowStep.offerReceived;
         final isCustomerLeg = nextOrder.currentStep ==
                 DeliveryFlowStep.headingToCustomer ||
             nextOrder.currentStep == DeliveryFlowStep.enterCustomerOtp;
         ref.read(riderNavigationProvider.notifier).fetchNavigation(
               nextOrder.orderId,
-              leg: nextOrder.currentStep == DeliveryFlowStep.offerReceived
+              leg: isOffer
                   ? NavigationLegEnum.full
                   : (isCustomerLeg
                       ? NavigationLegEnum.delivery

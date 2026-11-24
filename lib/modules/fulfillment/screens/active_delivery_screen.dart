@@ -266,14 +266,14 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                 infoWindow: const InfoWindow(title: 'You (Rider)'),
               ),
             },
-            polylines: {
+            polylines: polylinePoints.length >= 2 ? {
               TwoWheelerRouteHelper.createTwoWheelerPolyline(
                 polylineId: 'toStoreRoute',
                 points: polylinePoints,
                 color: Colors.blue.shade600,
                 width: 6,
               ),
-            },
+            } : const {},
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
           ),
@@ -889,7 +889,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
         ? navState.routePoints
         : TwoWheelerRouteHelper.generateTwoWheelerRoute(
             origin: riderPos,
-            destination: order.customerLocation,
+            destination: order.storeLocation,
           );
 
     final double distToCustomerMeters = TwoWheelerRouteHelper.calculateDistanceMeters(
@@ -975,14 +975,14 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                 infoWindow: const InfoWindow(title: 'You (Rider)'),
               ),
             },
-            polylines: {
+            polylines: polylinePoints.length >= 2 ? {
               TwoWheelerRouteHelper.createTwoWheelerPolyline(
                 polylineId: 'toCustomerRoute',
                 points: polylinePoints,
                 color: Brand.red,
                 width: 6,
               ),
-            },
+            } : const {},
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
           ),

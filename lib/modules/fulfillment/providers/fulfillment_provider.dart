@@ -125,7 +125,26 @@ class FulfillmentNotifier extends Notifier<FulfillmentState> {
 
         if (activeState.stateType == RiderStateType.activeOffer &&
             activeState.activeOffer != null) {
-          final mappedOrder = DeliveryOrder.fromActiveOffer(activeState.activeOffer!);
+          var mappedOrder = DeliveryOrder.fromActiveOffer(activeState.activeOffer!);
+          final knownOrder = state.activeOrder;
+          final offerHasCustomerLocation = activeState.activeOffer!.customerLatitude != 0 &&
+              activeState.activeOffer!.customerLongitude != 0;
+          if (!offerHasCustomerLocation &&
+              knownOrder != null &&
+              knownOrder.orderId == mappedOrder.orderId &&
+              (knownOrder.customerLocation.latitude != 0 ||
+                  knownOrder.customerLocation.longitude != 0)) {
+            // The active-offer API version may omit customer coordinates. Keep the
+            // coordinates already received with this same offer notification.
+            mappedOrder = mappedOrder.copyWith(
+              customerName: knownOrder.customerName,
+              customerAddress: knownOrder.customerAddress,
+              customerPhone: knownOrder.customerPhone,
+              customerLocation: knownOrder.customerLocation,
+              customerDistanceText: knownOrder.customerDistanceText,
+              customerTimeText: knownOrder.customerTimeText,
+            );
+          }
           state = state.copyWith(
             activeStateResponse: activeState,
             activeOrder: mappedOrder,

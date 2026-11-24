@@ -31,6 +31,10 @@ class RiderOfferPreview {
   final String storeAddress;
   final double storeLatitude;
   final double storeLongitude;
+  final String customerName;
+  final String customerAddress;
+  final double customerLatitude;
+  final double customerLongitude;
   final String deliveryArea;
   final double? distanceKm;
   final int totalItems;
@@ -47,6 +51,10 @@ class RiderOfferPreview {
     required this.storeAddress,
     required this.storeLatitude,
     required this.storeLongitude,
+    this.customerName = '',
+    this.customerAddress = '',
+    this.customerLatitude = 0,
+    this.customerLongitude = 0,
     required this.deliveryArea,
     this.distanceKm,
     required this.totalItems,
@@ -77,6 +85,10 @@ class RiderOfferPreview {
       storeLongitude: parseCoordinate(
         json['storeLongitude'] ?? json['store_longitude'] ?? json['longitude'] ?? json['lng'],
       ),
+      customerName: json['customerName']?.toString() ?? '',
+      customerAddress: json['customerAddress']?.toString() ?? '',
+      customerLatitude: parseCoordinate(json['customerLatitude'] ?? json['deliveryLatitude']),
+      customerLongitude: parseCoordinate(json['customerLongitude'] ?? json['deliveryLongitude']),
       deliveryArea: json['deliveryArea']?.toString() ?? '',
       distanceKm: (json['distanceKm'] as num?)?.toDouble(),
       totalItems: (json['totalItems'] as num?)?.toInt() ?? 0,
@@ -96,6 +108,10 @@ class RiderOfferPreview {
         'storeAddress': storeAddress,
         'storeLatitude': storeLatitude,
         'storeLongitude': storeLongitude,
+        'customerName': customerName,
+        'customerAddress': customerAddress,
+        'customerLatitude': customerLatitude,
+        'customerLongitude': customerLongitude,
         'deliveryArea': deliveryArea,
         'distanceKm': distanceKm,
         'totalItems': totalItems,

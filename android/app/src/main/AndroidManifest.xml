@@ -17,7 +17,7 @@
         <!-- GOOGLE MAPS API KEY: Must be inside application -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyCX3NJVthjKa7IUMGcd2ew1vkCua4eaD_I" />
+            android:value="AIzaSyBQZFMMwQM_Iw3d-FCH3zVA-2RtkCId-Uk" />
 
         <!-- GOOGLE PLAY SERVICES -->
         <meta-data
