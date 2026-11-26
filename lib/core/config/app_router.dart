@@ -1,5 +1,4 @@
 import 'package:adm_rider/core/navigation/main_navigation_shell.dart';
-import 'package:adm_rider/core/navigation/navigation_config.dart';
 import 'package:adm_rider/modules/auth/providers/auth_provider.dart';
 import 'package:adm_rider/modules/dashboard/screens/dashboard_screen.dart';
 import 'package:adm_rider/modules/dashboard/screens/profile_screen.dart';
@@ -32,7 +31,7 @@ class AppRoutes {
   static const String bankPayout = '/bank-payout';
   static const String activeDelivery = '/active-delivery';
   static const String kycVerification = '/auth/kycVerification';
-  static const String underReview = '/under-review';
+  static const String underReview = '/profile';
   static const String kycRetry = '/kyc-retry';
   static const String notificationList = '/notificationList';
 }
@@ -78,8 +77,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ─── Authenticated ──────────────────────────────────────────
       if (authState is AuthAuthenticated) {
         final nextStep = authState.user.nextStep;
+        final verificationStatus = authState.user.verificationStatus;
+        final isUnderReview =
+            nextStep.isUnderReview || verificationStatus.isUnderReview;
         debugPrint('NEXT STEP: ${nextStep.value}');
+        debugPrint('VERIFICATION STATUS: ${verificationStatus.value}');
         debugPrint('Current Path: $currentPath');
+
+        // ─── UNDER REVIEW ────────────────────────────────────────
+        if (isUnderReview) {
+          if (currentPath == AppRoutes.profile ||
+              currentPath == AppRoutes.settings ||
+              currentPath == AppRoutes.bankPayout ||
+              currentPath == AppRoutes.notificationList) {
+            return null;
+          }
+          return AppRoutes.profile;
+        }
 
         // ─── HOME ──────────────────────────────────────────────────
         if (nextStep.isHome) {
@@ -96,12 +110,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (nextStep.isProfileSetup) {
           if (currentPath == AppRoutes.profileSetup) return null;
           return AppRoutes.profileSetup;
-        }
-
-        // ─── UNDER REVIEW ────────────────────────────────────────
-        if (nextStep.isUnderReview) {
-          if (currentPath == AppRoutes.underReview) return null;
-          return AppRoutes.underReview;
         }
 
         // ─── REJECTED RETRY ──────────────────────────────────────
@@ -135,6 +143,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.bankPayout, builder: (_, __) => const BankPayoutDetailsScreen()),
       GoRoute(path: AppRoutes.activeDelivery, builder: (_, __) => const ActiveDeliveryScreen()),
       GoRoute(path: AppRoutes.notificationList, builder: (_, __) => const NotificationScreen()),
+      GoRoute(path: '/under-review', redirect: (_, __) => AppRoutes.profile),
 
       // Post-auth status screens
       GoRoute(

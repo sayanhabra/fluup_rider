@@ -4,6 +4,7 @@ import 'package:adm_rider/core/config/app_theme.dart';
 import 'package:adm_rider/core/config/brand.dart';
 import 'package:adm_rider/core/shared/styles/app_colors.dart';
 import 'package:adm_rider/core/shared/styles/app_style.dart';
+import 'package:adm_rider/core/shared/widgets/bot_trap_field.dart';
 import 'package:adm_rider/modules/auth/providers/auth_provider.dart';
 import 'package:adm_rider/modules/dashboard/widgets/dashboard_loading_screen.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   // ─── Controllers ───
   final _mobileController = TextEditingController();
   final _nameController = TextEditingController();
+  final _botTrapController = TextEditingController();
   final _otpControllers = List.generate(6, (_) => TextEditingController());
   final _otpFocusNodes = List.generate(6, (_) => FocusNode());
   final _mobileFocus = FocusNode();
@@ -108,6 +110,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void dispose() {
     _mobileController.dispose();
     _nameController.dispose();
+    _botTrapController.dispose();
     for (final c in _otpControllers) {
       c.dispose();
     }
@@ -166,7 +169,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final notifier = ref.read(authNotifierProvider.notifier);
     final String phoneNumber = phone;
 
-    await notifier.checkPhone(phoneNumber);
+    await notifier.checkPhone(
+      phoneNumber,
+      botTrap: _botTrapController.text.trim(),
+    );
 
     if (!mounted) return;
 
@@ -197,7 +203,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final name = _nameController.text.trim();
     final notifier = ref.read(authNotifierProvider.notifier);
 
-    await notifier.sendOtp(phone: _phone!, name: name);
+    await notifier.sendOtp(
+      phone: _phone!,
+      name: name,
+      botTrap: _botTrapController.text.trim(),
+    );
 
     if (!mounted) return;
     final authState = ref.read(authNotifierProvider).asData?.value;
@@ -229,6 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       code: otp,
       name: name,
       challengeToken: _challengeToken!,
+      botTrap: _botTrapController.text.trim(),
     );
 
     if (!mounted) return;
@@ -580,6 +591,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
         const SizedBox(height: 10),
+        BotTrapField(controller: _botTrapController),
         _Stagger(
           index: 2,
           child: Row(

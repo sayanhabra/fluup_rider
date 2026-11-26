@@ -1,5 +1,8 @@
+import 'package:adm_rider/core/config/app_router.dart';
 import 'package:adm_rider/core/config/brand.dart';
 import 'package:adm_rider/core/navigation/navigation_config.dart';
+import 'package:adm_rider/core/shared/widgets/toast.dart';
+import 'package:adm_rider/modules/auth/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +13,10 @@ class BottomNavBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(navigationItemsProvider);
+    final currentUser = ref.watch(currentUserProvider);
+    final isUnderReview = currentUser != null &&
+        (currentUser.verificationStatus.isUnderReview ||
+            currentUser.nextStep.isUnderReview);
 
     final location = GoRouterState.of(context).matchedLocation;
     final selectedIndex = items.indexWhere((item) => item.route == location);
@@ -40,22 +47,38 @@ class BottomNavBar extends ConsumerWidget {
             children: List.generate(items.length, (index) {
               final item = items[index];
               final isSelected = index == effectiveIndex;
+              final isTabEnabled =
+                  !isUnderReview || item.route == AppRoutes.profile;
+
+              final Color activeColor =
+                  isSelected ? Brand.red : const Color(0xFF64748B);
+              final Color tabColor =
+                  isTabEnabled ? activeColor : const Color(0xFFCBD5E1);
 
               return InkWell(
                 onTap: () {
+                  if (!isTabEnabled) {
+                    AppToast.info(
+                      title: 'Account Under Review',
+                      message:
+                          'Verification is in progress. Other tabs will unlock once approved.',
+                    );
+                    return;
+                  }
                   if (!isSelected) {
                     context.go(item.route);
                   }
                 },
                 borderRadius: BorderRadius.circular(12),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         isSelected ? item.activeIcon : item.icon,
-                        color: isSelected ? Brand.red : const Color(0xFF64748B),
+                        color: tabColor,
                         size: 24,
                       ),
                       const SizedBox(height: 3),
@@ -63,8 +86,9 @@ class BottomNavBar extends ConsumerWidget {
                         item.label,
                         style: TextStyle(
                           fontSize: 11,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          color: isSelected ? Brand.red : const Color(0xFF64748B),
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: tabColor,
                         ),
                       ),
                     ],

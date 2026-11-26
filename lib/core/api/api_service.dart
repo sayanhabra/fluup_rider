@@ -6,6 +6,7 @@ import 'package:adm_rider/modules/auth/models/set_profile_submit_response.dart';
 import 'package:adm_rider/modules/auth/models/user_model.dart';
 import 'package:adm_rider/modules/auth/models/verify_otp_request.dart';
 import 'package:adm_rider/modules/auth/models/verify_otp_response.dart';
+import 'package:adm_rider/core/shared/helpers/client_security_helper.dart';
 import 'package:adm_rider/modules/notifications/models/notification_models.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -36,10 +37,20 @@ class ApiService {
   // ==================== RIDER AUTH ====================
 
   /// POST /rider/auth/check-phone
-  Future<CheckPhoneResponse> checkPhone(String phoneNumber) async {
+  Future<CheckPhoneResponse> checkPhone(
+    String phoneNumber, {
+    String botTrap = '',
+    String? clientSignature,
+  }) async {
+    final signature =
+        clientSignature ?? ClientSecurityHelper.generateClientSignature(phoneNumber);
     return _handler.post(
       endpoint: '${ApiEndpoints.baseUrlRider}${ApiEndpoints.checkPhoneNo}',
-      data: {'phone': phoneNumber},
+      data: {
+        'phone': phoneNumber,
+        'botTrap': botTrap,
+        'clientSignature': signature,
+      },
       contentType: RequestContentType.json,
       fromJson: (json) => CheckPhoneResponse.fromJson(json),
       errorMessage: 'Failed to check phone number',
@@ -47,8 +58,19 @@ class ApiService {
   }
 
   /// POST /rider/auth/send-otp
-  Future<SendOtpResponse> sendOtp({required String phone, String? name}) async {
-    final data = {'phone': phone};
+  Future<SendOtpResponse> sendOtp({
+    required String phone,
+    String? name,
+    String botTrap = '',
+    String? clientSignature,
+  }) async {
+    final signature =
+        clientSignature ?? ClientSecurityHelper.generateClientSignature(phone);
+    final data = <String, dynamic>{
+      'phone': phone,
+      'botTrap': botTrap,
+      'clientSignature': signature,
+    };
     if (name != null && name.isNotEmpty) {
       data['name'] = name;
     }

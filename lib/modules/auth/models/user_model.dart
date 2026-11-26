@@ -279,7 +279,7 @@ class UserModel {
     } else if (nextStep.isVerificationSubmission) {
       return '/kyc-verification';
     } else if (nextStep.isUnderReview) {
-      return '/under-review';
+      return '/profile';
     } else if (nextStep.isRejectedRetry) {
       return '/kyc-retry';
     } else if (nextStep.isHome) {

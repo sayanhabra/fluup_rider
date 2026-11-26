@@ -148,11 +148,19 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     }
   }
 
-  Future<void> checkPhone(String phoneNumber) async {
+  Future<void> checkPhone(
+    String phoneNumber, {
+    String botTrap = '',
+    String? clientSignature,
+  }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       try {
-        final response = await _apiService.checkPhone(phoneNumber);
+        final response = await _apiService.checkPhone(
+          phoneNumber,
+          botTrap: botTrap,
+          clientSignature: clientSignature,
+        );
 
         // Existing user: backend already sent OTP in check-phone response
         if (response.isExistingUser) {
@@ -172,11 +180,21 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     });
   }
 
-  Future<void> sendOtp({required String phone, String? name}) async {
+  Future<void> sendOtp({
+    required String phone,
+    String? name,
+    String botTrap = '',
+    String? clientSignature,
+  }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       try {
-        final response = await _apiService.sendOtp(phone: phone, name: name);
+        final response = await _apiService.sendOtp(
+          phone: phone,
+          name: name,
+          botTrap: botTrap,
+          clientSignature: clientSignature,
+        );
         return AuthOtpSent(
           phoneNumber: phone,
           name: name,
@@ -198,6 +216,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     required String challengeToken,
     String? deviceToken, // optional — if null, auto-fetch
     String? deviceId, // optional — if null, auto-fetch
+    String botTrap = '',
+    String? clientSignature,
   }) async {
     state = const AsyncLoading();
 
@@ -225,6 +245,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           challengeToken: challengeToken,
           deviceToken: resolvedDeviceToken,
           deviceId: resolvedDeviceId,
+          botTrap: botTrap,
+          clientSignature: clientSignature,
         );
 
         final response = await _apiService.verifyOtp(request);

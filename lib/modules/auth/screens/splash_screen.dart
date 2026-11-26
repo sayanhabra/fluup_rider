@@ -86,14 +86,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final authState = ref.read(authNotifierProvider).asData?.value;
     if (authState is AuthAuthenticated) {
       final nextStep = authState.user.nextStep;
-      if (nextStep.isHome) {
+      final verificationStatus = authState.user.verificationStatus;
+      if (nextStep.isUnderReview || verificationStatus.isUnderReview) {
+        context.go(AppRoutes.profile);
+      } else if (nextStep.isHome) {
         context.go(AppRoutes.dashboard);
       } else if (nextStep.isVerificationSubmission) {
         context.go(AppRoutes.kycVerification);
       } else if (nextStep.isProfileSetup) {
         context.go(AppRoutes.profileSetup);
-      } else if (nextStep.isUnderReview) {
-        context.go(AppRoutes.underReview);
       } else if (nextStep.isRejectedRetry) {
         context.go(AppRoutes.kycRetry);
       } else {
