@@ -152,6 +152,7 @@ class NotificationData {
   final String entityId;
   final String priority;
   final String actionLabel;
+  final String? notificationId;
 
   NotificationData({
     required this.type,
@@ -162,18 +163,20 @@ class NotificationData {
     required this.entityId,
     required this.priority,
     required this.actionLabel,
+    this.notificationId,
   });
 
   factory NotificationData.fromJson(Map<String, dynamic> json) {
     return NotificationData(
-      type: json['type'] ?? '',
-      event: json['event'] ?? '',
-      sound: json['sound'] ?? 'default',
-      webUrl: json['webUrl'] ?? '',
-      deepLink: json['deepLink'] ?? '',
-      entityId: json['entityId'] ?? '',
-      priority: json['priority'] ?? 'NORMAL',
-      actionLabel: json['actionLabel'] ?? '',
+      type: json['type']?.toString() ?? '',
+      event: json['event']?.toString() ?? '',
+      sound: json['sound']?.toString() ?? 'default',
+      webUrl: json['webUrl']?.toString() ?? '',
+      deepLink: json['deepLink']?.toString() ?? '',
+      entityId: json['entityId']?.toString() ?? '',
+      priority: json['priority']?.toString() ?? 'NORMAL',
+      actionLabel: json['actionLabel']?.toString() ?? '',
+      notificationId: json['notificationId']?.toString() ?? json['id']?.toString(),
     );
   }
 
@@ -187,6 +190,7 @@ class NotificationData {
       'entityId': entityId,
       'priority': priority,
       'actionLabel': actionLabel,
+      if (notificationId != null) 'notificationId': notificationId,
     };
   }
 }

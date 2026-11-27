@@ -7,6 +7,7 @@ import 'package:adm_rider/modules/fulfillment/models/delivery_order.dart';
 import 'package:adm_rider/modules/fulfillment/providers/fulfillment_provider.dart';
 import 'package:adm_rider/modules/fulfillment/screens/new_order_request_modal.dart';
 import 'package:adm_rider/modules/notifications/services/local_notification_service.dart';
+import 'package:adm_rider/modules/notifications/services/notification_navigation_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -102,7 +103,15 @@ class FcmService {
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    handleNotificationPayload(message.data);
+    final data = message.data;
+    if (data.isNotEmpty) {
+      final event = data['event']?.toString().toUpperCase();
+      final type = data['type']?.toString().toUpperCase();
+      if (event == 'RIDER_OFFER' || type == 'RIDER_OFFER') {
+        handleNotificationPayload(data);
+      }
+      NotificationNavigationHandler.handleDataTap(data);
+    }
   }
 
   /// Processes notification data payload.

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:adm_rider/modules/notifications/services/fcm_service.dart';
+import 'package:adm_rider/modules/notifications/services/notification_navigation_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -102,13 +103,16 @@ class LocalNotificationService {
     try {
       final decoded = jsonDecode(payload);
       debugPrint('Decoded: $decoded');
-      if (decoded is Map<String, dynamic>) {
-        FcmService.instance.handleNotificationPayload(decoded);
-      } else if (decoded is Map) {
-        FcmService.instance.handleNotificationPayload(
-          Map<String, dynamic>.from(decoded),
-        );
+      final Map<String, dynamic> data = decoded is Map<String, dynamic>
+          ? decoded
+          : Map<String, dynamic>.from(decoded as Map);
+
+      final event = data['event']?.toString().toUpperCase();
+      final type = data['type']?.toString().toUpperCase();
+      if (event == 'RIDER_OFFER' || type == 'RIDER_OFFER') {
+        FcmService.instance.handleNotificationPayload(data);
       }
+      NotificationNavigationHandler.handleDataTap(data);
     } catch (e) {
       debugPrint('Failed to parse local notification payload: $e');
     }

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:adm_rider/modules/notifications/models/notification_models.dart';
 import 'package:adm_rider/modules/notifications/provider/notification_provider.dart';
+import 'package:adm_rider/modules/notifications/services/notification_navigation_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -63,34 +65,17 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
 
   Future<void> _onNotificationTap(NotificationItem notification) async {
     // Mark as read optimistically via provider
-    if (notification.data?.type.toLowerCase() == 'order') {
-      // context.push(
-      //   AppRoutes.orderDetailsPath(
-      //     int.parse(notification.data?.entityId ?? '0'),
-      //   ),
-      // );
-    } else {}
-    // else if (notification.data?.type.toLowerCase() == 'event') {
-    //   context.push(
-    //     AppRoutes.eventDetailPath(
-    //       int.parse(notification.data?.entityId ?? '0'),
-    //     ),
-    //   );
-    // } else if (notification.data?.type.toLowerCase() == 'store') {
-    //   context.push(
-    //     AppRoutes.storeDetailPath(
-    //       int.parse(notification.data?.entityId ?? '0'),
-    //     ),
-    //   );
-    // }
     if (!notification.isRead) {
-      await ref
+      unawaited(ref
           .read(notificationNotifierProvider.notifier)
-          .markAsRead(notification.id);
+          .markAsRead(notification.id));
     }
 
-    // TODO: navigate using notification.data?.webUrl / deepLink
-    if (!mounted) return;
+    NotificationNavigationHandler.handleNotificationItemTap(
+      context,
+      notification,
+      ref: ref,
+    );
   }
 
   Future<void> _markAllAsRead() async {
