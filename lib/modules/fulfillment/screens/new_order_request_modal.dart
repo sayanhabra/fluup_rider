@@ -63,7 +63,7 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
     ref.read(riderNavigationProvider.notifier).clear();
     var riderPos = ref.read(riderLiveLocationProvider);
     if (riderPos == null) {
-      final result = await LocationHelper.instance.getLocationWithFallback();
+      final result = await LocationHelper.instance.getLocationWithFastFallback();
       if (result.isSuccess && result.position != null) {
         riderPos = LatLng(result.position!.latitude, result.position!.longitude);
         ref.read(riderLiveLocationProvider.notifier).updateLocation(riderPos);
@@ -72,11 +72,7 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
     if (!mounted) return;
     setState(() => _riderLocation = riderPos);
 
-    final effectiveRider = riderPos ??
-        LatLng(
-          widget.order.storeLocation.latitude - 0.012,
-          widget.order.storeLocation.longitude - 0.008,
-        );
+    final effectiveRider = riderPos ?? widget.order.storeLocation;
 
     ref.read(riderNavigationProvider.notifier).fetchNavigation(
           widget.order.orderId,
@@ -86,6 +82,26 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
           storeLocation: widget.order.storeLocation,
           customerLocation: widget.order.customerLocation,
         );
+
+    if (riderPos != null) {
+      _fitMapToOrder(riderPos);
+    }
+  }
+
+  void _fitMapToOrder(LatLng? riderPos, {List<LatLng>? extraPoints}) {
+    if (_mapController == null) return;
+    final allPoints = <LatLng>[
+      ?riderPos,
+      widget.order.storeLocation,
+      widget.order.customerLocation,
+      ...?extraPoints,
+    ];
+    final bounds = TwoWheelerRouteHelper.calculateBounds(allPoints, paddingRatio: 0.002);
+    if (bounds != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 50),
+      );
+    }
   }
 
   void _startCountdown() {
@@ -182,11 +198,7 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
   }
 
   Set<Polyline> _buildPolylines(LatLng? riderPos, RiderNavigationState navState) {
-    final effectiveRider = riderPos ??
-        LatLng(
-          widget.order.storeLocation.latitude - 0.012,
-          widget.order.storeLocation.longitude - 0.008,
-        );
+    final effectiveRider = riderPos ?? widget.order.storeLocation;
 
     final points = navState.routePoints.isNotEmpty
         ? navState.routePoints
@@ -214,6 +226,20 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
     final navState = ref.watch(riderNavigationProvider);
     final liveLocation = ref.watch(riderLiveLocationProvider);
     final riderPos = liveLocation ?? _riderLocation;
+
+    ref.listen<LatLng?>(riderLiveLocationProvider, (prev, next) {
+      if (next != null && next != prev) {
+        setState(() => _riderLocation = next);
+        _fitMapToOrder(next);
+      }
+    });
+
+    ref.listen<RiderNavigationState>(riderNavigationProvider, (prev, next) {
+      if (next.routePoints.isNotEmpty && next.routePoints != prev?.routePoints) {
+        final pos = ref.read(riderLiveLocationProvider) ?? _riderLocation;
+        _fitMapToOrder(pos, extraPoints: next.routePoints);
+      }
+    });
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -269,21 +295,12 @@ class _NewOrderRequestModalState extends ConsumerState<NewOrderRequestModal> {
                 children: [
                   GoogleMap(
                     initialCameraPosition: CameraPosition(
-                      target: order.storeLocation,
-                      zoom: 13.0,
+                      target: riderPos ?? order.storeLocation,
+                      zoom: 14.0,
                     ),
                     onMapCreated: (controller) {
                       _mapController = controller;
-                      final bounds = TwoWheelerRouteHelper.calculateBounds([
-                        if (riderPos != null) riderPos,
-                        order.storeLocation,
-                        order.customerLocation,
-                      ]);
-                      if (bounds != null) {
-                        controller.animateCamera(
-                          CameraUpdate.newLatLngBounds(bounds, 50),
-                        );
-                      }
+                      _fitMapToOrder(riderPos, extraPoints: navState.routePoints);
                     },
                     markers: _buildMarkers(riderPos),
                     polylines: _buildPolylines(riderPos, navState),

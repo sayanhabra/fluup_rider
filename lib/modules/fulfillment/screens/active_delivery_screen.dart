@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:adm_rider/core/config/brand.dart';
+import 'package:adm_rider/core/shared/helpers/location_helper.dart';
 import 'package:adm_rider/core/shared/helpers/rider_location_tracker.dart';
 import 'package:adm_rider/core/shared/helpers/two_wheeler_marker_helper.dart';
 import 'package:adm_rider/core/shared/helpers/two_wheeler_route_helper.dart';
@@ -38,7 +39,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     _initTwoWheelerIcon();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await ref.read(fulfillmentProvider.notifier).checkAndSyncActiveState();
-      _initNavigationForCurrentStep();
+      await _ensureLocationAndInitNavigation();
     });
   }
 
@@ -57,15 +58,30 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     });
   }
 
-  void _initNavigationForCurrentStep() {
+  Future<void> _ensureLocationAndInitNavigation() async {
+    var riderLoc = ref.read(riderLiveLocationProvider);
+    if (riderLoc == null) {
+      final locResult = await LocationHelper.instance.getLocationWithFastFallback();
+      if (locResult.isSuccess && locResult.position != null) {
+        riderLoc = LatLng(locResult.position!.latitude, locResult.position!.longitude);
+        ref.read(riderLiveLocationProvider.notifier).updateLocation(riderLoc);
+      }
+    }
+    if (!mounted) return;
+    _initNavigationForCurrentStep(riderLoc: riderLoc);
+  }
+
+  void _initNavigationForCurrentStep({LatLng? riderLoc}) {
     final order = ref.read(fulfillmentProvider).activeOrder ?? DeliveryOrder.sample();
-    final riderLoc = ref.read(riderLiveLocationProvider);
-    final effectiveRiderLat = riderLoc?.latitude ?? (order.storeLocation.latitude - 0.0015);
-    final effectiveRiderLng = riderLoc?.longitude ?? (order.storeLocation.longitude - 0.0015);
+    final effectiveRider = riderLoc ?? ref.read(riderLiveLocationProvider);
 
     final isCustomerLeg = order.currentStep == DeliveryFlowStep.headingToCustomer ||
         order.currentStep == DeliveryFlowStep.enterCustomerOtp;
     final leg = isCustomerLeg ? NavigationLegEnum.delivery : NavigationLegEnum.pickup;
+
+    final double effectiveRiderLat = effectiveRider?.latitude ?? order.storeLocation.latitude;
+    final double effectiveRiderLng = effectiveRider?.longitude ?? order.storeLocation.longitude;
+
     ref.read(riderNavigationProvider.notifier).fetchNavigation(
           order.orderId,
           leg: leg,
@@ -76,17 +92,17 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
         );
   }
 
-  void _fitMapToRoute(DeliveryOrder order, List<LatLng> points, LatLng riderPos) {
+  void _fitMapToRoute(DeliveryOrder order, List<LatLng> points, LatLng? riderPos) {
     if (_mapController == null) return;
     final isCustomer = order.currentStep == DeliveryFlowStep.headingToCustomer ||
         order.currentStep == DeliveryFlowStep.enterCustomerOtp;
     final destination = isCustomer ? order.customerLocation : order.storeLocation;
     final allPoints = <LatLng>[
-      riderPos,
+      ?riderPos,
       destination,
       ...points,
     ];
-    final bounds = TwoWheelerRouteHelper.calculateBounds(allPoints, paddingRatio: 0.0015);
+    final bounds = TwoWheelerRouteHelper.calculateBounds(allPoints, paddingRatio: 0.002);
     if (bounds != null) {
       _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
     }
@@ -127,7 +143,16 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   Widget build(BuildContext context) {
     ref.listen<LatLng?>(riderLiveLocationProvider, (prev, next) {
       if (next != null && next != prev && _mapController != null) {
-        _mapController!.animateCamera(CameraUpdate.newLatLng(next));
+        if (prev == null) {
+          _initNavigationForCurrentStep(riderLoc: next);
+        }
+        final order = ref.read(fulfillmentProvider).activeOrder;
+        final nav = ref.read(riderNavigationProvider);
+        if (order != null) {
+          _fitMapToRoute(order, nav.routePoints, next);
+        } else {
+          _mapController!.animateCamera(CameraUpdate.newLatLng(next));
+        }
       }
     });
 
@@ -135,8 +160,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
       if (next.routePoints.isNotEmpty && next.routePoints != prev?.routePoints && _mapController != null) {
         final order = ref.read(fulfillmentProvider).activeOrder;
         if (order != null) {
-          final riderPos = ref.read(riderLiveLocationProvider) ??
-              LatLng(order.storeLocation.latitude - 0.0015, order.storeLocation.longitude - 0.0015);
+          final riderPos = ref.read(riderLiveLocationProvider);
           _fitMapToRoute(order, next.routePoints, riderPos);
         }
       }
@@ -174,19 +198,22 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   Widget _buildHeadingToStore(BuildContext context, DeliveryOrder order) {
     final navState = ref.watch(riderNavigationProvider);
     final fulfillment = ref.watch(fulfillmentProvider);
-    final riderPos = ref.watch(riderLiveLocationProvider) ??
-        LatLng(order.storeLocation.latitude - 0.0015, order.storeLocation.longitude - 0.0015);
+    final riderPos = ref.watch(riderLiveLocationProvider);
     final polylinePoints = navState.routePoints.isNotEmpty
         ? navState.routePoints
-        : TwoWheelerRouteHelper.generateTwoWheelerRoute(
-            origin: riderPos,
-            destination: order.storeLocation,
-          );
+        : (riderPos != null
+            ? TwoWheelerRouteHelper.generateTwoWheelerRoute(
+                origin: riderPos,
+                destination: order.storeLocation,
+              )
+            : <LatLng>[]);
 
-    final double distToStoreMeters = TwoWheelerRouteHelper.calculateDistanceMeters(
-      riderPos,
-      order.storeLocation,
-    );
+    final double distToStoreMeters = riderPos != null
+        ? TwoWheelerRouteHelper.calculateDistanceMeters(
+            riderPos,
+            order.storeLocation,
+          )
+        : 999.0;
     final bool isWithin30m = distToStoreMeters <= 30.0;
 
     return Scaffold(
@@ -240,7 +267,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           // Map View with route to Store
           GoogleMap(
             initialCameraPosition: CameraPosition(
-              target: order.storeLocation,
+              target: riderPos ?? order.storeLocation,
               zoom: 15.0,
             ),
             onMapCreated: (controller) {
@@ -257,14 +284,15 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                   snippet: order.storeAddress,
                 ),
               ),
-              Marker(
-                markerId: const MarkerId('rider_bike'),
-                position: riderPos,
-                icon: _twoWheelerIcon ??
-                    BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-                anchor: const Offset(0.5, 0.5),
-                infoWindow: const InfoWindow(title: 'You (Rider)'),
-              ),
+              if (riderPos != null)
+                Marker(
+                  markerId: const MarkerId('rider_bike'),
+                  position: riderPos,
+                  icon: _twoWheelerIcon ??
+                      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+                  anchor: const Offset(0.5, 0.5),
+                  infoWindow: const InfoWindow(title: 'You (Rider)'),
+                ),
             },
             polylines: polylinePoints.length >= 2 ? {
               TwoWheelerRouteHelper.createTwoWheelerPolyline(
@@ -370,8 +398,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                                 setState(() => _enteredOtp = '');
                                 await ref.read(fulfillmentProvider.notifier).confirmArrivedAtStore(
                                       order.orderId,
-                                      riderPos.latitude,
-                                      riderPos.longitude,
+                                      riderPos?.latitude ?? order.storeLocation.latitude,
+                                      riderPos?.longitude ?? order.storeLocation.longitude,
                                     );
                               },
                         icon: const Icon(Icons.storefront_rounded, color: Colors.white, size: 20),
@@ -838,8 +866,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                     setState(() => _enteredOtp = '');
                     ref.read(fulfillmentProvider.notifier).proceedToHeadingToCustomer();
                     final riderLoc = ref.read(riderLiveLocationProvider);
-                    final effectiveRiderLat = riderLoc?.latitude ?? (order.storeLocation.latitude - 0.0015);
-                    final effectiveRiderLng = riderLoc?.longitude ?? (order.storeLocation.longitude - 0.0015);
+                    final effectiveRiderLat = riderLoc?.latitude ?? order.storeLocation.latitude;
+                    final effectiveRiderLng = riderLoc?.longitude ?? order.storeLocation.longitude;
                     ref.read(riderNavigationProvider.notifier).changeLeg(
                           order.orderId,
                           NavigationLegEnum.delivery,
@@ -884,18 +912,21 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   Widget _buildHeadingToCustomer(BuildContext context, DeliveryOrder order) {
     final navState = ref.watch(riderNavigationProvider);
     final fulfillment = ref.watch(fulfillmentProvider);
-    final riderPos = ref.watch(riderLiveLocationProvider) ?? order.storeLocation;
+    final riderPos = ref.watch(riderLiveLocationProvider);
+    final effectiveRider = riderPos ?? order.storeLocation;
     final polylinePoints = navState.routePoints.isNotEmpty
         ? navState.routePoints
         : TwoWheelerRouteHelper.generateTwoWheelerRoute(
-            origin: riderPos,
-            destination: order.storeLocation,
+            origin: effectiveRider,
+            destination: order.customerLocation,
           );
 
-    final double distToCustomerMeters = TwoWheelerRouteHelper.calculateDistanceMeters(
-      riderPos,
-      order.customerLocation,
-    );
+    final double distToCustomerMeters = riderPos != null
+        ? TwoWheelerRouteHelper.calculateDistanceMeters(
+            riderPos,
+            order.customerLocation,
+          )
+        : 999.0;
     final bool isWithin30m = distToCustomerMeters <= 30.0;
 
     return Scaffold(
@@ -949,7 +980,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           // Map to customer location
           GoogleMap(
             initialCameraPosition: CameraPosition(
-              target: order.customerLocation,
+              target: riderPos ?? order.customerLocation,
               zoom: 15.0,
             ),
             onMapCreated: (controller) {
@@ -966,14 +997,15 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                   snippet: order.customerAddress,
                 ),
               ),
-              Marker(
-                markerId: const MarkerId('rider_bike'),
-                position: riderPos,
-                icon: _twoWheelerIcon ??
-                    BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-                anchor: const Offset(0.5, 0.5),
-                infoWindow: const InfoWindow(title: 'You (Rider)'),
-              ),
+              if (riderPos != null)
+                Marker(
+                  markerId: const MarkerId('rider_bike'),
+                  position: riderPos,
+                  icon: _twoWheelerIcon ??
+                      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+                  anchor: const Offset(0.5, 0.5),
+                  infoWindow: const InfoWindow(title: 'You (Rider)'),
+                ),
             },
             polylines: polylinePoints.length >= 2 ? {
               TwoWheelerRouteHelper.createTwoWheelerPolyline(
@@ -1079,8 +1111,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                                 setState(() => _enteredOtp = '');
                                 await ref.read(fulfillmentProvider.notifier).recordArrivedAtCustomer(
                                       order.orderId,
-                                      riderPos.latitude,
-                                      riderPos.longitude,
+                                      riderPos?.latitude ?? order.customerLocation.latitude,
+                                      riderPos?.longitude ?? order.customerLocation.longitude,
                                     );
                               },
                         icon: const Icon(Icons.pin_drop_rounded, color: Colors.white, size: 20),
@@ -1677,8 +1709,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
               onSelected: (_) {
                 final riderLoc = ref.read(riderLiveLocationProvider);
-                final effectiveRiderLat = riderLoc?.latitude ?? (order.storeLocation.latitude - 0.0015);
-                final effectiveRiderLng = riderLoc?.longitude ?? (order.storeLocation.longitude - 0.0015);
+                final effectiveRiderLat = riderLoc?.latitude ?? order.storeLocation.latitude;
+                final effectiveRiderLng = riderLoc?.longitude ?? order.storeLocation.longitude;
                 ref.read(riderNavigationProvider.notifier).changeLeg(
                       order.orderId,
                       leg,

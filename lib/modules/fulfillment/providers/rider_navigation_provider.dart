@@ -102,8 +102,8 @@ class RiderNavigationNotifier extends Notifier<RiderNavigationState> {
     );
 
     // Ensure valid non-null coordinates so backend never rejects with 400 Bad Request
-    final double effectiveRiderLat = riderLat ?? (storeLocation != null ? (storeLocation.latitude - 0.0015) : 22.5727);
-    final double effectiveRiderLng = riderLng ?? (storeLocation != null ? (storeLocation.longitude - 0.0015) : 88.4367);
+    final double effectiveRiderLat = riderLat ?? (storeLocation != null ? storeLocation.latitude : 22.5727);
+    final double effectiveRiderLng = riderLng ?? (storeLocation != null ? storeLocation.longitude : 88.4367);
 
     // In headless tests without an explicit mock, avoid unmocked Dio network calls that leave pending fake timers
     final isRealNetworkService = _apiService.runtimeType.toString() == 'ApiService';

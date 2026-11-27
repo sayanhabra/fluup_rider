@@ -91,9 +91,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _checkLocationPermission() async {
     if (!mounted) return;
-    setState(() {
-      _isLocationReady = false;
-    });
+
+    final cached = ref.read(riderLiveLocationProvider);
+    if (cached != null) {
+      setState(() {
+        _currentLocation = cached;
+        _isLocationReady = true;
+      });
+    } else {
+      setState(() {
+        _isLocationReady = false;
+      });
+    }
 
     if (!kIsWeb && Platform.environment.containsKey('FLUTTER_TEST')) {
       setState(() {
@@ -104,7 +113,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
 
     try {
-      final result = await _locationHelper.getLocationWithFallback();
+      final result = await _locationHelper.getLocationWithFastFallback();
       if (!mounted) return;
 
       if (result.isSuccess && result.position != null) {
@@ -121,7 +130,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           if (!mounted) return;
           _mapHelper.moveCamera(location, zoom: 15.0);
         });
-      } else {
+      } else if (cached == null) {
         // Use default Kolkata location for seamless experience
         setState(() {
           _currentLocation = const LatLng(22.5726, 88.3639);
@@ -130,10 +139,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _currentLocation = const LatLng(22.5726, 88.3639);
-        _isLocationReady = true;
-      });
+      if (cached == null) {
+        setState(() {
+          _currentLocation = const LatLng(22.5726, 88.3639);
+          _isLocationReady = true;
+        });
+      }
     }
   }
 
@@ -147,9 +158,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  void _fitDashboardMapToBounds(LatLng currentLocation, DeliveryOrder? activeOrder) {
+  void _fitDashboardMapToBounds(
+    LatLng currentLocation,
+    DeliveryOrder? activeOrder,
+  ) {
     if (_mapController == null || activeOrder == null) return;
-    final isCustomerLeg = activeOrder.currentStep == DeliveryFlowStep.headingToCustomer ||
+    final isCustomerLeg =
+        activeOrder.currentStep == DeliveryFlowStep.headingToCustomer ||
         activeOrder.currentStep == DeliveryFlowStep.enterCustomerOtp;
     final isOffer = activeOrder.currentStep == DeliveryFlowStep.offerReceived;
 
@@ -158,21 +173,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       activeOrder.storeLocation,
       if (isOffer || isCustomerLeg) activeOrder.customerLocation,
     ];
-    final bounds = TwoWheelerRouteHelper.calculateBounds(points, paddingRatio: 0.002);
+    final bounds = TwoWheelerRouteHelper.calculateBounds(
+      points,
+      paddingRatio: 0.002,
+    );
     if (bounds != null) {
       _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
     }
   }
 
-  Set<Marker> _buildDashboardMarkers(LatLng currentLocation, DeliveryOrder? activeOrder) {
+  Set<Marker> _buildDashboardMarkers(
+    LatLng currentLocation,
+    DeliveryOrder? activeOrder,
+  ) {
     final markers = <Marker>{
       Marker(
         markerId: const MarkerId('rider_loc'),
         position: currentLocation,
-        icon: _twoWheelerIcon ??
-            BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueRed,
-            ),
+        icon:
+            _twoWheelerIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
         anchor: const Offset(0.5, 0.5),
         infoWindow: const InfoWindow(title: 'You (Rider)'),
       ),
@@ -199,7 +219,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         Marker(
           markerId: const MarkerId('customer_loc'),
           position: activeOrder.customerLocation,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
           infoWindow: InfoWindow(
             title: activeOrder.customerName,
             snippet:
@@ -235,8 +257,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             );
     } else {
       // Active Ride: Route depending on current milestone
-      final isCustomerLeg = activeOrder.currentStep ==
-              DeliveryFlowStep.headingToCustomer ||
+      final isCustomerLeg =
+          activeOrder.currentStep == DeliveryFlowStep.headingToCustomer ||
           activeOrder.currentStep == DeliveryFlowStep.enterCustomerOtp;
       final target = isCustomerLeg
           ? activeOrder.customerLocation
@@ -356,16 +378,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           (nextOrder.orderId != prevOrder?.orderId ||
               nextOrder.currentStep != prevOrder?.currentStep)) {
         final isOffer = nextOrder.currentStep == DeliveryFlowStep.offerReceived;
-        final isCustomerLeg = nextOrder.currentStep ==
-                DeliveryFlowStep.headingToCustomer ||
+        final isCustomerLeg =
+            nextOrder.currentStep == DeliveryFlowStep.headingToCustomer ||
             nextOrder.currentStep == DeliveryFlowStep.enterCustomerOtp;
-        ref.read(riderNavigationProvider.notifier).fetchNavigation(
+        ref
+            .read(riderNavigationProvider.notifier)
+            .fetchNavigation(
               nextOrder.orderId,
               leg: isOffer
                   ? NavigationLegEnum.full
                   : (isCustomerLeg
-                      ? NavigationLegEnum.delivery
-                      : NavigationLegEnum.pickup),
+                        ? NavigationLegEnum.delivery
+                        : NavigationLegEnum.pickup),
               riderLat: currentLocation.latitude,
               riderLng: currentLocation.longitude,
               storeLocation: nextOrder.storeLocation,
@@ -604,8 +628,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   // Incoming Ride Offer Card (ACTIVE_OFFER)
                   if (activeOrder != null &&
-                      activeOrder.currentStep ==
-                          DeliveryFlowStep.offerReceived)
+                      activeOrder.currentStep == DeliveryFlowStep.offerReceived)
                     Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
@@ -862,38 +885,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                           ),
                         ],
-                      ),
-                    ),
-
-                  // Button to simulate / trigger incoming order (for testing & demoing Screen 4)
-                  if (activeOrder == null ||
-                      activeOrder.currentStep ==
-                          DeliveryFlowStep.deliveryCompleted)
-                    TextButton.icon(
-                      onPressed: () => _showNewOrderSheet(context),
-                      icon: const Icon(
-                        Icons.flash_on,
-                        color: Brand.red,
-                        size: 16,
-                      ),
-                      label: const Text(
-                        'Simulate New Delivery Offer',
-                        style: TextStyle(
-                          color: Brand.red,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        backgroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
                       ),
                     ),
                 ],
